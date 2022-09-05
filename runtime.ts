@@ -65,6 +65,7 @@ export function createRequestHandler<Context = unknown>({
 }: CreateRequestHandlerArgs<Context>) {
   appDirectory = path.resolve(appDirectory);
   staticDirectory = path.resolve(staticDirectory);
+  generatedFile = path.resolve(generatedFile);
 
   const runtime = createRuntime({
     appDirectory,
@@ -86,6 +87,7 @@ export function createRequestHandler<Context = unknown>({
         const contentTypeHeader = contentType(
           url.pathname.split(".").slice(-1)[0]
         );
+
         return new Response(await Deno.readFile(staticPath), {
           headers: contentTypeHeader
             ? {
@@ -129,6 +131,8 @@ function createRuntime({
   manifest?: any;
   emitDevEvent?: (event: unknown) => void;
 }) {
+  appDirectory = path.resolve(appDirectory);
+  generatedFile = generatedFile ? path.resolve(generatedFile) : undefined;
   const assetsLRU = new LRU<string>(500);
 
   let lastBuildChecksum: string | undefined;
