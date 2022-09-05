@@ -11,6 +11,7 @@ const sockets = new Set<WebSocket>();
 const handler = createRequestHandler({
   mode,
   generatedFile: Deno.cwd() + "/remix.gen.ts",
+  importGeneratedFile: () => import("./remix.gen.ts"),
   appDirectory: Deno.cwd() + "/app",
   staticDirectory: Deno.cwd() + "/public",
   browserImportMapPath:

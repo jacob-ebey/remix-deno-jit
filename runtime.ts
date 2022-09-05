@@ -41,6 +41,7 @@ async function ensureEsbuildInitialized() {
 interface CreateRequestHandlerArgs<Context> {
   browserImportMapPath: string;
   generatedFile?: string;
+  importGeneratedFile?: () => Promise<any>;
   appDirectory?: string;
   staticDirectory?: string;
   mode?: "production" | "development";
@@ -51,6 +52,7 @@ interface CreateRequestHandlerArgs<Context> {
 export function createRequestHandler<Context = unknown>({
   appDirectory = path.resolve(Deno.cwd(), "app"),
   generatedFile = path.resolve(Deno.cwd(), "remix.gen.ts"),
+  importGeneratedFile,
   browserImportMapPath,
   staticDirectory = path.resolve(Deno.cwd(), "public"),
   mode = "production",
@@ -63,6 +65,7 @@ export function createRequestHandler<Context = unknown>({
   const runtime = createRuntime({
     appDirectory,
     generatedFile,
+    importGeneratedFile,
     browserImportMapPath,
     mode,
     emitDevEvent,
@@ -110,12 +113,14 @@ export function createRequestHandler<Context = unknown>({
 function createRuntime({
   appDirectory,
   generatedFile,
+  importGeneratedFile,
   browserImportMapPath,
   mode,
   emitDevEvent,
 }: {
   appDirectory: string;
   generatedFile: string;
+  importGeneratedFile?: () => Promise<any>;
   browserImportMapPath: string;
   mode: "production" | "development";
   emitDevEvent?: (event: unknown) => void;
@@ -158,7 +163,9 @@ function createRuntime({
     }
 
     if (mode === "production") {
-      const newBuild = await import(generatedFile);
+      const newBuild = importGeneratedFile
+        ? await importGeneratedFile()
+        : await import(generatedFile);
       lastBuildTime = timestamp;
       lastBuild = newBuild;
       lastBuildChecksum = newBuild.assets.version;
@@ -175,14 +182,12 @@ function createRuntime({
       buildChecksum(appDirectory),
     ]);
 
-    if (mode === "development") {
-      await writeGeneratedFile({
-        appDirectory,
-        generatedFile,
-        routes,
-        checksum,
-      });
-    }
+    await writeGeneratedFile({
+      appDirectory,
+      generatedFile,
+      routes,
+      checksum,
+    });
 
     const initializationTasks: Promise<unknown>[] = [];
 
