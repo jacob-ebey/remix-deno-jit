@@ -1,6 +1,9 @@
 import { createRequestHandler } from "./runtime.ts";
 
-const mode = Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development";
+const mode =
+  Deno.env.get("DENO_DEPLOYMENT_ID") || Deno.env.get("RAILWAY_ENVIRONMENT")
+    ? "production"
+    : "development";
 
 const sockets = new Set<WebSocket>();
 
