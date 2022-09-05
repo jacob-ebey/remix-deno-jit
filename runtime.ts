@@ -323,7 +323,7 @@ function createRuntime({
               }, {}),
               [requestedFileWithoutExt]: fileToBuild + "?route",
             },
-            outdir: `public/${checksum}`,
+            outdir: `/${checksum}`,
             write: false,
             bundle: true,
             splitting: true,
@@ -376,7 +376,7 @@ function createRuntime({
                           },
                           absWorkingDir: Deno.cwd(),
                           write: false,
-                          outdir: `public/${checksum}`,
+                          outdir: `/${checksum}`,
                           bundle: true,
                           splitting: true,
                           format: "esm",
@@ -437,6 +437,7 @@ function createRuntime({
 
           console.log("errors:", buildResult.errors);
           for (const output of buildResult.outputFiles) {
+            console.log(output.path);
             assetsLRU.set(output.path, output.text);
           }
         }
