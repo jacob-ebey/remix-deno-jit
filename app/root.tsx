@@ -1,4 +1,3 @@
-import * as React from "react";
 import { type MetaFunction } from "@remix-run/deno";
 import {
   Links,
@@ -9,19 +8,13 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 
-import JSConfetti from "js-confetti";
-
 export const meta: MetaFunction = () => ({
   title: "Remix",
   description: "Welcome to Remix on Deno!",
+  viewport: "width=device-width, initial-scale=1",
 });
 
 export default function App() {
-  React.useEffect(() => {
-    const jsConfetti = new JSConfetti();
-    jsConfetti.addConfetti();
-  }, []);
-
   return (
     <html lang="en">
       <head>

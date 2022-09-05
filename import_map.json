@@ -1,5 +1,6 @@
 {
   "imports": {
+    "~/": "./app/",
     "@remix-run/deno": "https://esm.sh/@remix-run/deno@1.7.0/index.ts",
     "@remix-run/server-runtime": "https://esm.sh/@remix-run/server-runtime@1.7.0",
     "@remix-run/react": "https://esm.sh/@remix-run/react@1.7.0?deps=react@18.2.0,react-dom@18.2.0",
@@ -10,6 +11,6 @@
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
     "react-dom/server": "https://esm.sh/react-dom@18.2.0/server",
 
-    "js-confetti": "https://esm.sh/js-confetti@0.10.2"
+    "react-rewards": "https://esm.sh/react-rewards@2.0.4"
   }
 }
