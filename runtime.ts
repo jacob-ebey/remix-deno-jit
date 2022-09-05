@@ -489,7 +489,6 @@ function createRuntime({
           return { entry, entryPoints };
         };
 
-        console.time(`${checksum} built in`);
         compilationPromise = Promise.all([
           getEntryPoints(),
           ensureEsbuildInitialized(),
@@ -516,14 +515,13 @@ function createRuntime({
             jsx: "automatic",
             jsxImportSource: "react",
             publicPath: `/${checksum}/`,
-            logLevel: "silent",
+            logLevel: "info",
             plugins: getPlugins(),
             metafile: true,
           })
         );
 
         const buildResult = await compilationPromise;
-        console.timeEnd(`${checksum} built in`);
         const cwdLen = Deno.cwd().length;
         for (const output of buildResult.outputFiles) {
           assetsLRU.set(
