@@ -7,7 +7,7 @@ WORKDIR /app
 
 # These steps will be re-run upon each file change in your working directory:
 ADD . .
-# Compile the main app so that it doesn't need to be compiled each startup/entry.
-RUN deno cache server.ts
+# Cache deps so that they are not re-fetched on each build.
+RUN find . -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache {} +
 
 CMD ["deno", "task", "start"]
