@@ -516,6 +516,7 @@ function createRuntime({
             jsxImportSource: "react",
             publicPath: `/${checksum}/`,
             logLevel: "info",
+            color: mode === "development",
             plugins: getPlugins(),
             metafile: true,
           })
