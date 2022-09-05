@@ -12,7 +12,7 @@ import {
 } from "@remix-run/deno";
 
 // -- esbuild --
-// @deno-types="https://deno.land/x/esbuild@v0.14.39/mod.d.ts"
+// @deno-types="https://deno.land/x/esbuild@v0.15.7/mod.d.ts"
 import esbuildWasm from "https://esm.sh/esbuild-wasm@0.15.7/lib/browser.js?pin=v86&target=deno";
 import * as esbuildNative from "https://deno.land/x/esbuild@v0.15.7/mod.js";
 // @ts-ignore trust me
@@ -24,7 +24,7 @@ async function ensureEsbuildInitialized() {
   if (esbuildInitialized === false) {
     if (Deno.run === undefined) {
       esbuildInitialized = esbuild.initialize({
-        wasmURL: "https://esm.sh/esbuild-wasm@0.14.39/esbuild.wasm",
+        wasmURL: "https://esm.sh/esbuild-wasm@0.15.7/esbuild.wasm",
         worker: false,
       });
     } else {
