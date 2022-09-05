@@ -15,7 +15,6 @@ import {
 // @deno-types="https://deno.land/x/esbuild@v0.14.39/mod.d.ts"
 import esbuildWasm from "https://esm.sh/esbuild-wasm@0.15.7/lib/browser.js?pin=v86&target=deno";
 import * as esbuildNative from "https://deno.land/x/esbuild@v0.15.7/mod.js";
-import { CHAR_GRAVE_ACCENT } from "https://deno.land/std@0.128.0/path/_constants.ts";
 // @ts-ignore trust me
 const esbuild: typeof esbuildWasm =
   Deno.run === undefined ? esbuildWasm : esbuildNative;
@@ -38,23 +37,28 @@ async function ensureEsbuildInitialized() {
   }
 }
 
-interface CreateRequestHandlerArgs<Context> {
+interface CommonOptions<Context> {
+  port?: number;
   browserImportMapPath: string;
-  generatedFile?: string;
-  importGeneratedFile?: () => Promise<any>;
   appDirectory?: string;
   staticDirectory?: string;
+  generatedFile?: string;
+  manifest?: any;
+  getLoadContext?: (request: Request) => Promise<Context>;
+}
+
+interface CreateRequestHandlerArgs<Context> extends CommonOptions<Context> {
+  generatedFile?: string;
   mode?: "production" | "development";
   emitDevEvent?: (event: unknown) => void;
-  getLoadContext?: (request: Request) => Promise<Context>;
 }
 
 export function createRequestHandler<Context = unknown>({
   appDirectory = path.resolve(Deno.cwd(), "app"),
   generatedFile = path.resolve(Deno.cwd(), "remix.gen.ts"),
-  importGeneratedFile,
   browserImportMapPath,
   staticDirectory = path.resolve(Deno.cwd(), "public"),
+  manifest,
   mode = "production",
   getLoadContext,
   emitDevEvent,
@@ -64,8 +68,8 @@ export function createRequestHandler<Context = unknown>({
 
   const runtime = createRuntime({
     appDirectory,
+    manifest,
     generatedFile,
-    importGeneratedFile,
     browserImportMapPath,
     mode,
     emitDevEvent,
@@ -113,16 +117,16 @@ export function createRequestHandler<Context = unknown>({
 function createRuntime({
   appDirectory,
   generatedFile,
-  importGeneratedFile,
   browserImportMapPath,
   mode,
+  manifest,
   emitDevEvent,
 }: {
   appDirectory: string;
-  generatedFile: string;
-  importGeneratedFile?: () => Promise<any>;
   browserImportMapPath: string;
   mode: "production" | "development";
+  generatedFile?: string;
+  manifest?: any;
   emitDevEvent?: (event: unknown) => void;
 }) {
   const assetsLRU = new LRU<string>(500);
@@ -163,16 +167,14 @@ function createRuntime({
     }
 
     if (mode === "production") {
-      const newBuild = importGeneratedFile
-        ? await importGeneratedFile()
-        : await import(generatedFile);
+      const newBuild = manifest || (await import(generatedFile!));
       lastBuildTime = timestamp;
       lastBuild = newBuild;
       lastBuildChecksum = newBuild.assets.version;
       lastRoutes = new Map(
         Object.values(
           newBuild.routes as Record<string, { file: string; id: string }>
-        ).map((r) => [path.resolve(path.dirname(generatedFile), r.file), r.id])
+        ).map((r) => [path.resolve(path.dirname(generatedFile!), r.file), r.id])
       );
       return newBuild;
     }
@@ -184,7 +186,7 @@ function createRuntime({
 
     await writeGeneratedFile({
       appDirectory,
-      generatedFile,
+      generatedFile: generatedFile!,
       routes,
       checksum,
     });
@@ -462,62 +464,6 @@ function createRuntime({
         ];
       };
 
-      // if (mode === "development") {
-      //   const requestedFile = url.pathname.split("/").slice(2).join("/");
-      //   if (requestedFile.endsWith(".js")) {
-      //     const requestedFileWithoutExt = requestedFile
-      //       .split(".")
-      //       .slice(0, -1)
-      //       .join(".");
-      //     const fileToBuild = await findFileWithExt(
-      //       path.join(appDirectory, requestedFileWithoutExt),
-      //       [".tsx", ".ts"]
-      //     );
-
-      //     if (fileToBuild) {
-      //       const importMap = JSON.parse(
-      //         await Deno.readTextFile(browserImportMapPath)
-      //       );
-
-      //       console.time(`${fileToBuild} built in`);
-      //       await ensureEsbuildInitialized();
-      //       const buildResult = await esbuild.build({
-      //         treeShaking: true,
-      //         logLevel: "silent",
-      //         entryPoints: {
-      //           ...Object.entries(importMap.imports).reduce(
-      //             (acc, [id, src]) => {
-      //               return {
-      //                 ...acc,
-      //                 [`dep_${id}`]: src,
-      //               };
-      //             },
-      //             {}
-      //           ),
-      //           [requestedFileWithoutExt]: fileToBuild + "?route",
-      //         },
-      //         outdir: `/${checksum}`,
-      //         write: false,
-      //         bundle: true,
-      //         splitting: true,
-      //         format: "esm",
-      //         publicPath: `/${checksum}/`,
-      //         plugins: getPlugins(),
-      //       });
-      //       console.timeEnd(`${fileToBuild} built in`);
-
-      //       if (buildResult.errors?.length) {
-      //         console.log("errors:", buildResult.errors);
-      //       } else {
-      //         console.log("Build successful");
-      //       }
-
-      //       for (const output of buildResult.outputFiles || {}) {
-      //         assetsLRU.set(output.path, output.text);
-      //       }
-      //     }
-      //   }
-      // } else {
       if (!compilationPromise || lastModifiedTime > lastClientBuildTime) {
         lastClientBuildTime = Date.now();
         const getEntryPoints = async () => {
@@ -569,7 +515,6 @@ function createRuntime({
           assetsLRU.set(output.path, output.text);
         }
       }
-      // }
 
       await compilationPromise;
 
@@ -670,7 +615,7 @@ export async function loadRoutes(appDirectory: string) {
     // do nothing
   }
 
-  function cleanUpPath(route: any) {
+  function cleanUpPath(route: { parentId?: string; path?: string }) {
     if (route.parentId && route.path && routes[route.parentId].path) {
       route.path = route.path
         .slice(-routes[route.parentId].path!.length)
@@ -681,7 +626,6 @@ export async function loadRoutes(appDirectory: string) {
 
   for (const route of Object.values(routes)) {
     cleanUpPath(route);
-    console.log(route);
   }
 
   return routes;
@@ -816,9 +760,10 @@ export async function writeGeneratedFile({
       .join("\n\t") +
     "\t\t\n}";
 
+  // TODO: Remove checksum from manifest
   await Deno.writeTextFile(
     generatedFile,
-    `// DO NOT EDIT. This file is generated by fresh.
+    `// DO NOT EDIT. This file is generated by remix-deno-jit.
 // This file SHOULD be checked into source version control.
 // This file is automatically updated during development when running \`deno task dev\`.
 
@@ -839,4 +784,107 @@ export const assets = {
 };
 `
   );
+}
+
+let defaultPort = Number(Deno.env.get("PORT"));
+defaultPort = Number.isSafeInteger(defaultPort) ? defaultPort : 8080;
+
+export async function dev<Context>({
+  generatedFile = Deno.cwd() + "/remix.gen.ts",
+  port = defaultPort,
+  ...options
+}: CommonOptions<Context>) {
+  const mode = "development";
+  window.location = { port: port.toString() } as Window["location"];
+
+  const sockets = new Set<WebSocket>();
+
+  const handler = createRequestHandler({
+    ...options,
+    mode,
+    generatedFile,
+    emitDevEvent: (event) => {
+      for (const socket of sockets) {
+        socket.send(JSON.stringify(event));
+      }
+    },
+  });
+
+  const server = Deno.listen({ port });
+  console.log(`Listening on http://localhost:${port}`);
+
+  for await (const conn of server) {
+    (async () => {
+      const httpConn = Deno.serveHttp(conn);
+      for await (const requestEvent of httpConn) {
+        const url = new URL(requestEvent.request.url);
+        if (mode === "development" && url.pathname === "/socket") {
+          const { socket, response } = Deno.upgradeWebSocket(
+            requestEvent.request
+          );
+          sockets.add(socket);
+          socket.onclose = () => {
+            sockets.delete(socket);
+          };
+          socket.onerror = () => {
+            sockets.delete(socket);
+          };
+          return await requestEvent.respondWith(response).catch(() => {});
+        }
+
+        try {
+          const response = await handler(requestEvent.request);
+          requestEvent.respondWith(response).catch(() => {});
+        } catch (error) {
+          console.error(error);
+          requestEvent
+            .respondWith(
+              new Response(error.message, {
+                status: 500,
+              })
+            )
+            .catch(() => {});
+        }
+      }
+    })();
+  }
+}
+
+export async function start<Context>({
+  generatedFile = Deno.cwd() + "/remix.gen.ts",
+  port = defaultPort,
+  ...options
+}: CommonOptions<Context>) {
+  const mode = "production";
+  window.location = { port: port.toString() } as Window["location"];
+
+  const handler = createRequestHandler({
+    ...options,
+    mode,
+    generatedFile,
+  });
+
+  const server = Deno.listen({ port });
+  console.log(`Listening on http://localhost:${port}`);
+
+  for await (const conn of server) {
+    (async () => {
+      const httpConn = Deno.serveHttp(conn);
+      for await (const requestEvent of httpConn) {
+        try {
+          const response = await handler(requestEvent.request);
+          requestEvent.respondWith(response).catch(() => {});
+        } catch (error) {
+          console.error(error);
+          requestEvent
+            .respondWith(
+              new Response(error.message, {
+                status: 500,
+              })
+            )
+            .catch(() => {});
+        }
+      }
+    })();
+  }
 }
