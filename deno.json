@@ -7,6 +7,7 @@
   "importMap": "import_map.json",
   "compilerOptions": {
     "lib": ["deno.window", "dom"],
-    "jsx": "react"
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
   }
 }
