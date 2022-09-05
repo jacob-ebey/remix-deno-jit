@@ -1,5 +1,6 @@
 import * as fs from "https://deno.land/std@0.154.0/fs/mod.ts";
 import * as path from "https://deno.land/std@0.154.0/path/mod.ts";
+import { iterateReader } from "https://deno.land/std@0.154.0/streams/conversion.ts";
 import { contentType } from "https://deno.land/std@0.154.0/media_types/mod.ts";
 import { createHash } from "https://deno.land/std@0.154.0/hash/mod.ts";
 import { LRU } from "https://deno.land/x/lru@1.0.2/mod.ts";
@@ -544,7 +545,7 @@ async function buildChecksum(appDirectory: string) {
       continue;
     }
     const file = await Deno.open(entry.path);
-    for await (const chunk of Deno.iter(file)) {
+    for await (const chunk of iterateReader(file)) {
       hash.update(chunk);
     }
   }
