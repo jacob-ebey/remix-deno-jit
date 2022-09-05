@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-read --allow-env --allow-run --allow-write server.ts"
+  },
+  "importMap": "import_map.json",
+  "compilerOptions": {
+    "lib": ["deno.window", "dom"],
+    "jsx": "react"
+  }
+}
