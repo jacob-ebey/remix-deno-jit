@@ -3,7 +3,7 @@ import { type LoaderArgs, json } from "@remix-run/deno";
 import { Link, useLoaderData } from "@remix-run/react";
 
 export function loader({}: LoaderArgs) {
-  return json({ message: "Hello from Remix on Deno!" });
+  return json({ message: "Hello from Remix on Deno!!" });
 }
 
 export default function Index() {

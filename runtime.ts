@@ -15,6 +15,7 @@ import {
 // @deno-types="https://deno.land/x/esbuild@v0.14.39/mod.d.ts"
 import esbuildWasm from "https://esm.sh/esbuild-wasm@0.15.7/lib/browser.js?pin=v86&target=deno";
 import * as esbuildNative from "https://deno.land/x/esbuild@v0.15.7/mod.js";
+import { CHAR_GRAVE_ACCENT } from "https://deno.land/std@0.128.0/path/_constants.ts";
 // @ts-ignore trust me
 const esbuild: typeof esbuildWasm =
   Deno.run === undefined ? esbuildWasm : esbuildNative;
@@ -42,6 +43,7 @@ interface CreateRequestHandlerArgs<Context> {
   appDirectory?: string;
   staticDirectory?: string;
   mode?: "production" | "development";
+  emitDevEvent?: (event: unknown) => void;
   getLoadContext?: (request: Request) => Promise<Context>;
 }
 
@@ -51,6 +53,7 @@ export function createRequestHandler<Context = unknown>({
   staticDirectory = path.resolve(Deno.cwd(), "public"),
   mode = "production",
   getLoadContext,
+  emitDevEvent,
 }: CreateRequestHandlerArgs<Context>) {
   appDirectory = path.resolve(appDirectory);
   staticDirectory = path.resolve(staticDirectory);
@@ -58,8 +61,8 @@ export function createRequestHandler<Context = unknown>({
   const runtime = createRuntime({
     appDirectory,
     browserImportMapPath,
-    staticDirectory,
     mode,
+    emitDevEvent,
   });
 
   return async (request: Request): Promise<Response> => {
@@ -77,6 +80,7 @@ export function createRequestHandler<Context = unknown>({
           headers: contentTypeHeader
             ? {
                 "Content-Type": contentTypeHeader,
+                "Cache-Control": "public, max-age=31536000, immutable",
               }
             : undefined,
         });
@@ -103,13 +107,13 @@ export function createRequestHandler<Context = unknown>({
 function createRuntime({
   appDirectory,
   browserImportMapPath,
-  staticDirectory,
   mode,
+  emitDevEvent,
 }: {
   appDirectory: string;
   browserImportMapPath: string;
-  staticDirectory: string;
   mode: "production" | "development";
+  emitDevEvent?: (event: unknown) => void;
 }) {
   const assetsLRU = new LRU<string>(500);
 
@@ -117,7 +121,12 @@ function createRuntime({
   let lastBuild: ServerBuild | undefined;
   let lastBuildTime = 0;
   let lastModifiedTime = 0;
-  let lastRoutes: Set<string> | undefined;
+  let lastRoutes: Map<string, string> | undefined;
+  let compilationPromise: Promise<
+    esbuildWasm.BuildResult & {
+      outputFiles: esbuildWasm.OutputFile[];
+    }
+  >;
 
   if (mode === "development") {
     (async () => {
@@ -127,48 +136,95 @@ function createRuntime({
       for await (const event of watcher) {
         if (["create", "modify", "remove"].includes(event.kind)) {
           lastModifiedTime = Date.now();
+          if (emitDevEvent) emitDevEvent({ type: "RELOAD" });
         }
       }
     })();
   }
 
-  return {
-    async loadBuild(): Promise<ServerBuild> {
-      const timestamp = Date.now();
-      if (
-        (mode === "production" || lastModifiedTime <= lastBuildTime) &&
-        lastBuild
-      ) {
-        return lastBuild;
-      }
+  const loadBuild = async (): Promise<ServerBuild> => {
+    const timestamp = Date.now();
+    if (
+      (mode === "production" || lastModifiedTime <= lastBuildTime) &&
+      lastBuild
+    ) {
+      return lastBuild;
+    }
 
-      console.log("Loading build...");
+    console.log("Loading build...");
 
-      const [routes, checksum] = await Promise.all([
-        loadRoutes(appDirectory),
-        buildChecksum(appDirectory),
-      ]);
-      console.log("Build checksum:", checksum);
-      const initializationTasks: Promise<unknown>[] = [];
+    const [routes, checksum] = await Promise.all([
+      loadRoutes(appDirectory),
+      buildChecksum(appDirectory),
+    ]);
 
-      const routeModules = new Map<string, any>();
-      const newBuild: ServerBuild = {
-        entry: {
-          module: await import(
-            path.resolve(appDirectory, "entry.server.tsx") + "?ts=" + timestamp
-          ),
-        },
+    console.log("Build checksum:", checksum);
+    const initializationTasks: Promise<unknown>[] = [];
+
+    const routeModules = new Map<string, any>();
+    const newBuild: ServerBuild = {
+      entry: {
+        module: await import(
+          path.resolve(appDirectory, "entry.server.tsx") + "?ts=" + timestamp
+        ),
+      },
+      routes: Object.values(routes).reduce((acc, route) => {
+        let routeModule: any = undefined;
+        let ensurePromise: Promise<unknown>;
+        const ensureRouteModule = async () => {
+          if (ensurePromise) return ensurePromise;
+          if (typeof routeModule !== "undefined") return;
+          routeModule = await import(route.file + "?ts=" + timestamp);
+          routeModules.set(route.id, routeModule);
+        };
+        initializationTasks.push((ensurePromise = ensureRouteModule()));
+
+        return {
+          ...acc,
+          [route.id]: {
+            id: route.id,
+            path: route.path,
+            index: route.index,
+            parentId: route.parentId,
+            module: {
+              action: async (...args) => {
+                await ensureRouteModule();
+                return routeModule.action?.(...args) || null;
+              },
+              loader: async (...args) => {
+                await ensureRouteModule();
+                return routeModule.loader?.(...args) || null;
+              },
+              get CatchBoundary() {
+                return routeModule.CatchBoundary;
+              },
+              get default() {
+                return routeModule.default;
+              },
+              get ErrorBoundary() {
+                return routeModule.ErrorBoundary;
+              },
+              get handle() {
+                return routeModule.handle;
+              },
+              get headers() {
+                return routeModule.headers;
+              },
+              get links() {
+                return routeModule.links;
+              },
+              get meta() {
+                return routeModule.meta;
+              },
+            },
+          },
+        } as ServerBuild["routes"];
+      }, {} as ServerBuild["routes"]),
+      publicPath: `/${checksum}/`,
+      assetsBuildDirectory: "",
+      assets: {
+        entry: { imports: [], module: `/${checksum}/entry.client.js` },
         routes: Object.values(routes).reduce((acc, route) => {
-          let routeModule: any = undefined;
-          let ensurePromise: Promise<unknown>;
-          const ensureRouteModule = async () => {
-            if (ensurePromise) return ensurePromise;
-            if (typeof routeModule !== "undefined") return;
-            routeModule = await import(route.file + "?ts=" + timestamp);
-            routeModules.set(route.id, routeModule);
-          };
-          initializationTasks.push((ensurePromise = ensureRouteModule()));
-
           return {
             ...acc,
             [route.id]: {
@@ -176,85 +232,42 @@ function createRuntime({
               path: route.path,
               index: route.index,
               parentId: route.parentId,
-              module: {
-                action: async (...args) => {
-                  await ensureRouteModule();
-                  return routeModule.action?.(...args) || null;
-                },
-                loader: async (...args) => {
-                  await ensureRouteModule();
-                  return routeModule.loader?.(...args) || null;
-                },
-                get CatchBoundary() {
-                  return routeModule.CatchBoundary;
-                },
-                get default() {
-                  return routeModule.default;
-                },
-                get ErrorBoundary() {
-                  return routeModule.ErrorBoundary;
-                },
-                get handle() {
-                  return routeModule.handle;
-                },
-                get headers() {
-                  return routeModule.headers;
-                },
-                get links() {
-                  return routeModule.links;
-                },
-                get meta() {
-                  return routeModule.meta;
-                },
+              imports: [],
+              module: `/${checksum}/${route.id}.js`,
+              get hasAction() {
+                return !!routeModules.get(route.id).action;
+              },
+              get hasLoader() {
+                return !!routeModules.get(route.id).loader;
+              },
+              get hasCatchBoundary() {
+                return !!routeModules.get(route.id).CatchBoundary;
+              },
+              get hasErrorBoundary() {
+                return !!routeModules.get(route.id).ErrorBoundary;
               },
             },
-          } as ServerBuild["routes"];
-        }, {} as ServerBuild["routes"]),
-        publicPath: `/${checksum}/`,
-        assetsBuildDirectory: "",
-        assets: {
-          entry: { imports: [], module: `/${checksum}/entry.client.js` },
-          routes: Object.values(routes).reduce((acc, route) => {
-            return {
-              ...acc,
-              [route.id]: {
-                id: route.id,
-                path: route.path,
-                index: route.index,
-                parentId: route.parentId,
-                imports: [],
-                module: `/${checksum}/${route.id}.js`,
-                get hasAction() {
-                  return !!routeModules.get(route.id).action;
-                },
-                get hasLoader() {
-                  return !!routeModules.get(route.id).loader;
-                },
-                get hasCatchBoundary() {
-                  return !!routeModules.get(route.id).CatchBoundary;
-                },
-                get hasErrorBoundary() {
-                  return !!routeModules.get(route.id).ErrorBoundary;
-                },
-              },
-            };
-          }, {}),
-          url: `/${checksum}/manifest.js`,
-          version: checksum,
-        },
-      };
+          };
+        }, {}),
+        url: `/${checksum}/manifest.js`,
+        version: checksum,
+      },
+    };
 
-      await Promise.all(initializationTasks);
+    await Promise.all(initializationTasks);
 
-      if (timestamp > lastBuildTime) {
-        lastBuildTime = timestamp;
-        lastBuild = newBuild;
-        lastBuildChecksum = checksum;
-        lastRoutes = new Set(Object.values(routes).map((r) => r.file));
-      }
+    if (timestamp > lastBuildTime) {
+      lastBuildTime = timestamp;
+      lastBuild = newBuild;
+      lastBuildChecksum = checksum;
+      lastRoutes = new Map(Object.values(routes).map((r) => [r.file, r.id]));
+    }
 
-      return newBuild;
-    },
+    return newBuild;
+  };
+
+  return {
+    loadBuild,
     async serveAssets(url: URL): Promise<Response | undefined> {
       if (!url.pathname.startsWith(`/${lastBuildChecksum}/`)) {
         return undefined;
@@ -269,6 +282,7 @@ function createRuntime({
           headers: contentTypeHeader
             ? {
                 "Content-Type": contentTypeHeader,
+                "Cache-Control": "public, max-age=31536000, immutable",
               }
             : undefined,
         });
@@ -283,165 +297,238 @@ function createRuntime({
             headers: contentTypeHeader
               ? {
                   "Content-Type": contentTypeHeader,
+                  "Cache-Control": "public, max-age=31536000, immutable",
                 }
               : undefined,
           }
         );
       }
 
-      console.log({ requestedFile });
+      const getPlugins = () => {
+        const browserRouteModulesPlugin = {
+          name: "browser-route-modules",
+          setup(build: esbuildWasm.PluginBuild) {
+            build.onResolve({ filter: /\?route$/ }, (args) => {
+              const file = args.path.replace(/\?route$/, "");
+              if (lastRoutes!.has(file)) {
+                return {
+                  path: path.toFileUrl(args.path).href,
+                  namespace: "browser-route-modules",
+                  sideEffects: false,
+                  pluginData: { file },
+                };
+              }
+              return undefined;
+            });
+            build.onLoad(
+              { filter: /.*/, namespace: "browser-route-modules" },
+              async (args) => {
+                const file = args.pluginData.file;
+                if (file) {
+                  const result = await esbuild.build({
+                    minify: mode === "production",
+                    treeShaking: true,
+                    logLevel: "silent",
+                    entryPoints: {
+                      route: file,
+                    },
+                    write: false,
+                    outdir: `/${checksum}`,
+                    bundle: true,
+                    splitting: true,
+                    format: "esm",
+                    publicPath: `/${checksum}/`,
+                    metafile: true,
+                    plugins: [
+                      {
+                        name: "externals",
+                        setup(build) {
+                          build.onResolve({ filter: /.*/ }, (args) => {
+                            if (args.path !== file) {
+                              return {
+                                path: args.path,
+                                external: true,
+                              };
+                            }
+                            return undefined;
+                          });
+                        },
+                      },
+                    ],
+                  });
 
-      if (requestedFile.endsWith(".js")) {
-        const requestedFileWithoutExt = requestedFile
-          .split(".")
-          .slice(0, -1)
-          .join(".");
-        const fileToBuild = await findFileWithExt(
-          path.join(appDirectory, requestedFileWithoutExt),
-          [".tsx", ".ts"]
-        );
+                  const meta = Object.values(result.metafile?.outputs || {})[0];
 
-        console.log({ fileToBuild });
+                  if (meta) {
+                    const theExports = meta.exports.filter(
+                      (ex) => !!browserSafeRouteExports[ex]
+                    );
 
-        if (fileToBuild) {
-          const importMap = JSON.parse(
-            await Deno.readTextFile(browserImportMapPath)
+                    let contents = "module.exports = {};";
+                    if (theExports.length !== 0) {
+                      const spec = `{ ${theExports.join(", ")} }`;
+                      contents = `export ${spec} from ${JSON.stringify(file)};`;
+                    }
+
+                    return {
+                      contents,
+                      resolveDir: appDirectory,
+                      loader: "ts",
+                    };
+                  }
+                }
+                return undefined;
+              }
+            );
+          },
+        };
+
+        return [
+          {
+            name: "remix-env",
+            setup(build: esbuildWasm.PluginBuild) {
+              build.onResolve({ filter: /.*/ }, (args) => {
+                if (
+                  args.path.startsWith("https://deno.land/std") &&
+                  args.path.endsWith("/node/process.ts")
+                ) {
+                  return {
+                    path: args.path,
+                    sideEffects: false,
+                    namespace: "remix-env",
+                  };
+                }
+              });
+              build.onLoad({ filter: /.*/, namespace: "remix-env" }, (args) => {
+                return {
+                  contents: `export default { env: ${JSON.stringify({
+                    REMIX_DEV_SERVER_WS_PORT: window.location?.port || null,
+                  })} };`,
+                };
+              });
+            },
+          },
+          {
+            name: "exclude-deno",
+            setup(build: esbuildWasm.PluginBuild) {
+              build.onResolve({ filter: /.*/ }, (args) => {
+                if (
+                  args.path === "@remix-run/deno" ||
+                  args.resolveDir.match(/@remix-run\/deno/) ||
+                  args.path.startsWith("https://deno.land/std")
+                ) {
+                  return {
+                    path: args.path,
+                    external: true,
+                    sideEffects: false,
+                  };
+                }
+              });
+            },
+          },
+          browserRouteModulesPlugin,
+          denoPlugin({
+            importMapURL: path.toFileUrl(browserImportMapPath),
+          }) as any,
+        ];
+      };
+
+      if (mode === "development") {
+        if (requestedFile.endsWith(".js")) {
+          const requestedFileWithoutExt = requestedFile
+            .split(".")
+            .slice(0, -1)
+            .join(".");
+          const fileToBuild = await findFileWithExt(
+            path.join(appDirectory, requestedFileWithoutExt),
+            [".tsx", ".ts"]
           );
 
-          await ensureEsbuildInitialized();
-          const buildResult = await esbuild.build({
-            minify: mode === "production",
-            treeShaking: true,
-            logLevel: "silent",
-            absWorkingDir: Deno.cwd(),
+          if (fileToBuild) {
+            const importMap = JSON.parse(
+              await Deno.readTextFile(browserImportMapPath)
+            );
+
+            await ensureEsbuildInitialized();
+            const buildResult = await esbuild.build({
+              treeShaking: true,
+              logLevel: "silent",
+              entryPoints: {
+                ...Object.entries(importMap.imports).reduce(
+                  (acc, [id, src]) => {
+                    return {
+                      ...acc,
+                      [`dep_${id}`]: src,
+                    };
+                  },
+                  {}
+                ),
+                [requestedFileWithoutExt]: fileToBuild + "?route",
+              },
+              outdir: `/${checksum}`,
+              write: false,
+              bundle: true,
+              splitting: true,
+              format: "esm",
+              publicPath: `/${checksum}/`,
+              plugins: getPlugins(),
+            });
+
+            if (buildResult.errors?.length) {
+              console.log("errors:", buildResult.errors);
+            } else {
+              console.log("Build successful");
+            }
+
+            for (const output of buildResult.outputFiles || {}) {
+              assetsLRU.set(output.path, output.text);
+            }
+          }
+        }
+      } else {
+        if (!compilationPromise) {
+          const entry = await findFileWithExt(
+            path.resolve(appDirectory, "entry.client"),
+            [".tsx", ".ts"]
+          );
+          const entryPoints: Record<string, string> = entry
+            ? {
+                "entry.client": entry,
+              }
+            : {};
+
+          compilationPromise = esbuild.build({
             entryPoints: {
-              ...Object.entries(importMap.imports).reduce((acc, [id, src]) => {
-                return {
+              ...entryPoints,
+              ...[...lastRoutes!.entries()].reduce(
+                (acc, [file, routeId]) => ({
                   ...acc,
-                  [`dep_${id}`]: src,
-                };
-              }, {}),
-              [requestedFileWithoutExt]: fileToBuild + "?route",
+                  [routeId]: file + "?route",
+                }),
+                {}
+              ),
             },
+            minify: true,
+            treeShaking: true,
             outdir: `/${checksum}`,
             write: false,
             bundle: true,
             splitting: true,
             format: "esm",
             publicPath: `/${checksum}/`,
-            plugins: [
-              {
-                name: "exclude-deno",
-                setup(build) {
-                  build.onResolve({ filter: /.*/ }, (args) => {
-                    if (
-                      args.path === "@remix-run/deno" ||
-                      args.resolveDir.match(/@remix-run\/deno/)
-                    ) {
-                      return {
-                        path: args.path,
-                        external: true,
-                        sideEffects: false,
-                      };
-                    }
-                  });
-                },
-              },
-              {
-                name: "browser-route-modules",
-                setup(build) {
-                  build.onResolve({ filter: /\?route$/ }, (args) => {
-                    const file = args.path.replace(/\?route$/, "");
-                    if (lastRoutes!.has(file)) {
-                      return {
-                        path: path.toFileUrl(args.path).href,
-                        namespace: "browser-route-modules",
-                        sideEffects: false,
-                        pluginData: { file },
-                      };
-                    }
-                    return undefined;
-                  });
-                  build.onLoad(
-                    { filter: /.*/, namespace: "browser-route-modules" },
-                    async (args) => {
-                      const file = args.pluginData.file;
-                      if (file) {
-                        const result = await esbuild.build({
-                          minify: mode === "production",
-                          treeShaking: true,
-                          logLevel: "silent",
-                          entryPoints: {
-                            route: file,
-                          },
-                          absWorkingDir: Deno.cwd(),
-                          write: false,
-                          outdir: `/${checksum}`,
-                          bundle: true,
-                          splitting: true,
-                          format: "esm",
-                          publicPath: `/${checksum}/`,
-                          metafile: true,
-                          plugins: [
-                            {
-                              name: "externals",
-                              setup(build) {
-                                build.onResolve({ filter: /.*/ }, (args) => {
-                                  if (args.path !== file) {
-                                    return {
-                                      path: args.path,
-                                      external: true,
-                                    };
-                                  }
-                                  return undefined;
-                                });
-                              },
-                            },
-                          ],
-                        });
-
-                        const meta = Object.values(
-                          result.metafile?.outputs || {}
-                        )[0];
-
-                        if (meta) {
-                          const theExports = meta.exports.filter(
-                            (ex) => !!browserSafeRouteExports[ex]
-                          );
-
-                          let contents = "module.exports = {};";
-                          if (theExports.length !== 0) {
-                            const spec = `{ ${theExports.join(", ")} }`;
-                            contents = `export ${spec} from ${JSON.stringify(
-                              file
-                            )};`;
-                          }
-
-                          return {
-                            contents,
-                            resolveDir: appDirectory,
-                            loader: "ts",
-                          };
-                        }
-                      }
-                      return undefined;
-                    }
-                  );
-                },
-              },
-              denoPlugin({
-                importMapURL: path.toFileUrl(browserImportMapPath),
-              }) as any,
-            ],
+            logLevel: "silent",
+            plugins: getPlugins(),
+            metafile: true,
           });
 
-          console.log("errors:", buildResult.errors);
+          const buildResult = await compilationPromise;
           for (const output of buildResult.outputFiles) {
-            console.log(output.path);
             assetsLRU.set(output.path, output.text);
           }
         }
       }
+
+      await compilationPromise;
 
       const file = assetsLRU.get(url.pathname);
       if (file) {
@@ -449,6 +536,7 @@ function createRuntime({
           headers: contentTypeHeader
             ? {
                 "Content-Type": contentTypeHeader,
+                "Cache-Control": "public, max-age=31536000, immutable",
               }
             : undefined,
         });

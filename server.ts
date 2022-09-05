@@ -1,19 +1,30 @@
 import { createRequestHandler } from "./runtime.ts";
 
-// deno-lint-ignore no-constant-condition
-const mode = typeof Deno.env.get("DENO_DEPLOYMENT_ID")
-  ? "production"
-  : "development";
+const mode = Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development";
+
+const sockets = new Set<WebSocket>();
 
 const handler = createRequestHandler({
   mode,
   appDirectory: Deno.cwd() + "/app",
   staticDirectory: Deno.cwd() + "/public",
-  browserImportMapPath: Deno.cwd() + "/import_map.json",
+  browserImportMapPath:
+    mode === "development"
+      ? Deno.cwd() + "/import_map_dev.json"
+      : Deno.cwd() + "/import_map.json",
+  emitDevEvent:
+    mode !== "development"
+      ? undefined
+      : (event) => {
+          for (const socket of sockets) {
+            socket.send(JSON.stringify(event));
+          }
+        },
 });
 
 let port = Number(Deno.env.get("PORT"));
 port = Number.isSafeInteger(port) ? port : 8080;
+window.location = { port: port.toString() } as any;
 
 const server = Deno.listen({ port });
 console.log(`Listening on http://localhost:${port}`);
@@ -22,16 +33,33 @@ for await (const conn of server) {
   (async () => {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
+      const url = new URL(requestEvent.request.url);
+      if (mode === "development" && url.pathname === "/socket") {
+        const { socket, response } = Deno.upgradeWebSocket(
+          requestEvent.request
+        );
+        sockets.add(socket);
+        socket.onclose = () => {
+          sockets.delete(socket);
+        };
+        socket.onerror = (e) => {
+          sockets.delete(socket);
+        };
+        return await requestEvent.respondWith(response).catch(() => {});
+      }
+
       try {
         const response = await handler(requestEvent.request);
-        await requestEvent.respondWith(response);
+        requestEvent.respondWith(response).catch(() => {});
       } catch (error) {
         console.error(error);
-        await requestEvent.respondWith(
-          new Response(error.message, {
-            status: 500,
-          })
-        );
+        requestEvent
+          .respondWith(
+            new Response(error.message, {
+              status: 500,
+            })
+          )
+          .catch(() => {});
       }
     }
   })();

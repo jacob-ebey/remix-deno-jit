@@ -1,6 +1,7 @@
 {
   "tasks": {
-    "start": "deno run --allow-net --allow-read --allow-env --allow-run --allow-write server.ts"
+    "start": "deno run --allow-net --allow-read --allow-env --allow-run --allow-write server.ts",
+    "dev": "deno run --import-map import_map_dev.json --allow-net --allow-read --allow-env --allow-run --allow-write server.ts"
   },
   "importMap": "import_map.json",
   "compilerOptions": {
