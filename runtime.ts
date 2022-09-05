@@ -120,6 +120,7 @@ function createRuntime({
   let lastBuildChecksum: string | undefined;
   let lastBuild: ServerBuild | undefined;
   let lastBuildTime = 0;
+  let lastClientBuildTime = 0;
   let lastModifiedTime = 0;
   let lastRoutes: Map<string, string> | undefined;
   let compilationPromise: Promise<
@@ -151,14 +152,11 @@ function createRuntime({
       return lastBuild;
     }
 
-    console.log("Loading build...");
-
     const [routes, checksum] = await Promise.all([
       loadRoutes(appDirectory),
       buildChecksum(appDirectory),
     ]);
 
-    console.log("Build checksum:", checksum);
     const initializationTasks: Promise<unknown>[] = [];
 
     const routeModules = new Map<string, any>();
@@ -288,8 +286,6 @@ function createRuntime({
         });
       }
 
-      const requestedFile = url.pathname.split("/").slice(2).join("/");
-
       if (url.pathname.endsWith(`/${checksum}/manifest.js`)) {
         return new Response(
           `window.__remixManifest=${JSON.stringify(lastBuild!.assets)};`,
@@ -325,6 +321,7 @@ function createRuntime({
               async (args) => {
                 const file = args.pluginData.file;
                 if (file) {
+                  await ensureEsbuildInitialized();
                   const result = await esbuild.build({
                     minify: mode === "production",
                     treeShaking: true,
@@ -433,60 +430,65 @@ function createRuntime({
         ];
       };
 
-      if (mode === "development") {
-        if (requestedFile.endsWith(".js")) {
-          const requestedFileWithoutExt = requestedFile
-            .split(".")
-            .slice(0, -1)
-            .join(".");
-          const fileToBuild = await findFileWithExt(
-            path.join(appDirectory, requestedFileWithoutExt),
-            [".tsx", ".ts"]
-          );
+      // if (mode === "development") {
+      //   const requestedFile = url.pathname.split("/").slice(2).join("/");
+      //   if (requestedFile.endsWith(".js")) {
+      //     const requestedFileWithoutExt = requestedFile
+      //       .split(".")
+      //       .slice(0, -1)
+      //       .join(".");
+      //     const fileToBuild = await findFileWithExt(
+      //       path.join(appDirectory, requestedFileWithoutExt),
+      //       [".tsx", ".ts"]
+      //     );
 
-          if (fileToBuild) {
-            const importMap = JSON.parse(
-              await Deno.readTextFile(browserImportMapPath)
-            );
+      //     if (fileToBuild) {
+      //       const importMap = JSON.parse(
+      //         await Deno.readTextFile(browserImportMapPath)
+      //       );
 
-            await ensureEsbuildInitialized();
-            const buildResult = await esbuild.build({
-              treeShaking: true,
-              logLevel: "silent",
-              entryPoints: {
-                ...Object.entries(importMap.imports).reduce(
-                  (acc, [id, src]) => {
-                    return {
-                      ...acc,
-                      [`dep_${id}`]: src,
-                    };
-                  },
-                  {}
-                ),
-                [requestedFileWithoutExt]: fileToBuild + "?route",
-              },
-              outdir: `/${checksum}`,
-              write: false,
-              bundle: true,
-              splitting: true,
-              format: "esm",
-              publicPath: `/${checksum}/`,
-              plugins: getPlugins(),
-            });
+      //       console.time(`${fileToBuild} built in`);
+      //       await ensureEsbuildInitialized();
+      //       const buildResult = await esbuild.build({
+      //         treeShaking: true,
+      //         logLevel: "silent",
+      //         entryPoints: {
+      //           ...Object.entries(importMap.imports).reduce(
+      //             (acc, [id, src]) => {
+      //               return {
+      //                 ...acc,
+      //                 [`dep_${id}`]: src,
+      //               };
+      //             },
+      //             {}
+      //           ),
+      //           [requestedFileWithoutExt]: fileToBuild + "?route",
+      //         },
+      //         outdir: `/${checksum}`,
+      //         write: false,
+      //         bundle: true,
+      //         splitting: true,
+      //         format: "esm",
+      //         publicPath: `/${checksum}/`,
+      //         plugins: getPlugins(),
+      //       });
+      //       console.timeEnd(`${fileToBuild} built in`);
 
-            if (buildResult.errors?.length) {
-              console.log("errors:", buildResult.errors);
-            } else {
-              console.log("Build successful");
-            }
+      //       if (buildResult.errors?.length) {
+      //         console.log("errors:", buildResult.errors);
+      //       } else {
+      //         console.log("Build successful");
+      //       }
 
-            for (const output of buildResult.outputFiles || {}) {
-              assetsLRU.set(output.path, output.text);
-            }
-          }
-        }
-      } else {
-        if (!compilationPromise) {
+      //       for (const output of buildResult.outputFiles || {}) {
+      //         assetsLRU.set(output.path, output.text);
+      //       }
+      //     }
+      //   }
+      // } else {
+      if (!compilationPromise || lastModifiedTime > lastClientBuildTime) {
+        lastClientBuildTime = Date.now();
+        const getEntryPoints = async () => {
           const entry = await findFileWithExt(
             path.resolve(appDirectory, "entry.client"),
             [".tsx", ".ts"]
@@ -496,8 +498,15 @@ function createRuntime({
                 "entry.client": entry,
               }
             : {};
+          return { entry, entryPoints };
+        };
 
-          compilationPromise = esbuild.build({
+        console.time(`${checksum} built in`);
+        compilationPromise = Promise.all([
+          getEntryPoints(),
+          ensureEsbuildInitialized(),
+        ]).then(([{ entry, entryPoints }]) =>
+          esbuild.build({
             entryPoints: {
               ...entryPoints,
               ...[...lastRoutes!.entries()].reduce(
@@ -519,14 +528,16 @@ function createRuntime({
             logLevel: "silent",
             plugins: getPlugins(),
             metafile: true,
-          });
+          })
+        );
 
-          const buildResult = await compilationPromise;
-          for (const output of buildResult.outputFiles) {
-            assetsLRU.set(output.path, output.text);
-          }
+        const buildResult = await compilationPromise;
+        console.timeEnd(`${checksum} built in`);
+        for (const output of buildResult.outputFiles) {
+          assetsLRU.set(output.path, output.text);
         }
       }
+      // }
 
       await compilationPromise;
 
