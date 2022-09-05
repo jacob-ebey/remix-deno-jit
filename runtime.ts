@@ -361,6 +361,7 @@ function createRuntime({
                 if (file) {
                   await ensureEsbuildInitialized();
                   const result = await esbuild.build({
+                    absWorkingDir: Deno.cwd(),
                     minify: mode === "production",
                     treeShaking: true,
                     logLevel: "silent",
@@ -489,6 +490,7 @@ function createRuntime({
           ensureEsbuildInitialized(),
         ]).then(([{ entry, entryPoints }]) =>
           esbuild.build({
+            absWorkingDir: Deno.cwd(),
             entryPoints: {
               ...entryPoints,
               ...[...lastRoutes!.entries()].reduce(
