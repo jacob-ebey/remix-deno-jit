@@ -369,12 +369,14 @@ function createRuntime({
                       route: file,
                     },
                     write: false,
-                    outdir: `/${checksum}`,
+                    outdir: `.`,
                     bundle: true,
                     splitting: true,
                     format: "esm",
                     publicPath: `/${checksum}/`,
                     metafile: true,
+                    jsx: "automatic",
+                    jsxImportSource: "react",
                     plugins: [
                       {
                         name: "externals",
@@ -390,6 +392,9 @@ function createRuntime({
                           });
                         },
                       },
+                      denoPlugin({
+                        importMapURL: path.toFileUrl(browserImportMapPath),
+                      }) as any,
                     ],
                   });
 
@@ -503,11 +508,13 @@ function createRuntime({
             },
             minify: true,
             treeShaking: true,
-            outdir: `/${checksum}`,
+            outdir: `.`,
             write: false,
             bundle: true,
             splitting: true,
             format: "esm",
+            jsx: "automatic",
+            jsxImportSource: "react",
             publicPath: `/${checksum}/`,
             logLevel: "silent",
             plugins: getPlugins(),
@@ -517,8 +524,12 @@ function createRuntime({
 
         const buildResult = await compilationPromise;
         console.timeEnd(`${checksum} built in`);
+        const cwdLen = Deno.cwd().length;
         for (const output of buildResult.outputFiles) {
-          assetsLRU.set(output.path, output.text);
+          assetsLRU.set(
+            "/" + checksum + output.path.slice(cwdLen),
+            output.text
+          );
         }
       }
 
