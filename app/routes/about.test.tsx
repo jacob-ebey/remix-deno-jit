@@ -1,9 +1,9 @@
 import * as React from "react";
 import { type LoaderArgs, json } from "@remix-run/deno";
-import { Link, Outlet, useLoaderData } from "@remix-run/react";
+import { Link, useLoaderData } from "@remix-run/react";
 
 export function loader({}: LoaderArgs) {
-  return json({ message: "About Page!" });
+  return json({ message: "Nested Page!" });
 }
 
 export default function Index() {
@@ -11,16 +11,15 @@ export default function Index() {
   const [count, setCount] = React.useState(0);
 
   return (
-    <main>
+    <div>
       <h1>{message}</h1>
       <p>
-        <Link to="/">Home</Link>
+        <Link to="/">Nested</Link>
       </p>
       <p>
         <button onClick={() => setCount(count + 1)}>Increment</button>{" "}
         <span>Count: {count}</span>
       </p>
-      <Outlet />
-    </main>
+    </div>
   );
 }

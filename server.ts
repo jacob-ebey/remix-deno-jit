@@ -4,11 +4,13 @@ const mode =
   Deno.env.get("DENO_DEPLOYMENT_ID") || Deno.env.get("RAILWAY_ENVIRONMENT")
     ? "production"
     : "development";
+// const mode = "production";
 
 const sockets = new Set<WebSocket>();
 
 const handler = createRequestHandler({
   mode,
+  generatedFile: Deno.cwd() + "/remix.gen.ts",
   appDirectory: Deno.cwd() + "/app",
   staticDirectory: Deno.cwd() + "/public",
   browserImportMapPath:

@@ -40,6 +40,7 @@ async function ensureEsbuildInitialized() {
 
 interface CreateRequestHandlerArgs<Context> {
   browserImportMapPath: string;
+  generatedFile?: string;
   appDirectory?: string;
   staticDirectory?: string;
   mode?: "production" | "development";
@@ -49,6 +50,7 @@ interface CreateRequestHandlerArgs<Context> {
 
 export function createRequestHandler<Context = unknown>({
   appDirectory = path.resolve(Deno.cwd(), "app"),
+  generatedFile = path.resolve(Deno.cwd(), "remix.gen.ts"),
   browserImportMapPath,
   staticDirectory = path.resolve(Deno.cwd(), "public"),
   mode = "production",
@@ -60,6 +62,7 @@ export function createRequestHandler<Context = unknown>({
 
   const runtime = createRuntime({
     appDirectory,
+    generatedFile,
     browserImportMapPath,
     mode,
     emitDevEvent,
@@ -106,11 +109,13 @@ export function createRequestHandler<Context = unknown>({
 
 function createRuntime({
   appDirectory,
+  generatedFile,
   browserImportMapPath,
   mode,
   emitDevEvent,
 }: {
   appDirectory: string;
+  generatedFile: string;
   browserImportMapPath: string;
   mode: "production" | "development";
   emitDevEvent?: (event: unknown) => void;
@@ -152,10 +157,32 @@ function createRuntime({
       return lastBuild;
     }
 
+    if (mode === "production") {
+      const newBuild = await import(generatedFile);
+      lastBuildTime = timestamp;
+      lastBuild = newBuild;
+      lastBuildChecksum = newBuild.assets.version;
+      lastRoutes = new Map(
+        Object.values(
+          newBuild.routes as Record<string, { file: string; id: string }>
+        ).map((r) => [path.resolve(path.dirname(generatedFile), r.file), r.id])
+      );
+      return newBuild;
+    }
+
     const [routes, checksum] = await Promise.all([
       loadRoutes(appDirectory),
       buildChecksum(appDirectory),
     ]);
+
+    if (mode === "development") {
+      await writeGeneratedFile({
+        appDirectory,
+        generatedFile,
+        routes,
+        checksum,
+      });
+    }
 
     const initializationTasks: Promise<unknown>[] = [];
 
@@ -558,7 +585,7 @@ function createRuntime({
   };
 }
 
-async function loadRoutes(appDirectory: string) {
+export async function loadRoutes(appDirectory: string) {
   const routes: Record<
     string,
     {
@@ -601,15 +628,19 @@ async function loadRoutes(appDirectory: string) {
         ? withSlashes.replace(/\/?index$/, "")
         : withSlashes;
       const withSlugs = withoutIndex.replace(/\$/g, ":");
+      const fullPath = withSlugs
+        .split("/")
+        .map((segment) => segment.replace(/_$/, ""))
+        .join("/");
 
       entries.push({
-        id: "routes/" + withoutExtension,
+        id: "routes/" + withoutExtension.replace(/\./g, "/"),
         index,
-        path: withSlugs,
+        path: fullPath,
         file: entry.path,
       });
     }
-    entries = entries.sort((a, b) => a.id.localeCompare(b.id));
+    entries = entries.sort((a, b) => b.file.length - a.file.length);
 
     const findParentId = (id: string) => {
       if (id === "root") return undefined;
@@ -617,7 +648,7 @@ async function loadRoutes(appDirectory: string) {
       let foundId: string | undefined = undefined;
       for (const entry of entries) {
         if (entry.id === id) continue;
-        if (id.startsWith(entry.id)) {
+        if (id.startsWith(entry.id + "/")) {
           foundId = entry.id;
         }
       }
@@ -634,10 +665,24 @@ async function loadRoutes(appDirectory: string) {
     // do nothing
   }
 
+  function cleanUpPath(route: any) {
+    if (route.parentId && route.path && routes[route.parentId].path) {
+      route.path = route.path
+        .slice(-routes[route.parentId].path!.length)
+        .replace(/^\//, "")
+        .replace(/\/$/, "");
+    }
+  }
+
+  for (const route of Object.values(routes)) {
+    cleanUpPath(route);
+    console.log(route);
+  }
+
   return routes;
 }
 
-async function buildChecksum(appDirectory: string) {
+export async function buildChecksum(appDirectory: string) {
   const hash = createHash("md5");
 
   for await (const entry of fs.walk(appDirectory)) {
@@ -675,3 +720,118 @@ const browserSafeRouteExports: { [name: string]: boolean } = {
   meta: true,
   unstable_shouldReload: true,
 };
+
+export async function writeGeneratedFile({
+  generatedFile,
+  appDirectory,
+  routes,
+  checksum,
+}: {
+  generatedFile: string;
+  appDirectory: string;
+  routes: Record<
+    string,
+    {
+      id: string;
+      parentId?: string | undefined;
+      file: string;
+      path?: string | undefined;
+      index?: boolean | undefined;
+    }
+  >;
+  checksum: string;
+}) {
+  const serverEntry =
+    "./" +
+    path
+      .relative(
+        path.dirname(generatedFile),
+        path.resolve(appDirectory, "entry.server.tsx")
+      )
+      .replace(/\\/g, "/");
+
+  const routeImports = Object.values(routes)
+    .map(
+      (route, index) =>
+        `import * as route${index} from ${JSON.stringify(
+          "./" +
+            path
+              .relative(path.dirname(generatedFile), route.file)
+              .replace(/\\/g, "/")
+        )};`
+    )
+    .join("\n");
+
+  const routesObject =
+    "{\n" +
+    Object.values(routes)
+      .map(
+        (route, index) =>
+          `\t${JSON.stringify(route.id)}: {\n` +
+          `\t\tid: ${JSON.stringify(route.id)},\n` +
+          (route.path ? `\t\tpath: ${JSON.stringify(route.path)},\n` : "") +
+          (route.index ? `\t\tindex: ${JSON.stringify(route.index)},\n` : "") +
+          (route.parentId
+            ? `\t\tparentId: ${JSON.stringify(route.parentId)},\n`
+            : "") +
+          `\t\tmodule: route${index},\n` +
+          `\t\tfile: ${JSON.stringify(
+            "./" +
+              path
+                .relative(path.dirname(generatedFile), route.file)
+                .replace(/\\/g, "/")
+          )},\n` +
+          "\t},"
+      )
+      .join("\n") +
+    "\n}";
+
+  const assetRoutes =
+    "{\n" +
+    Object.values(routes)
+      .map(
+        (route, index) =>
+          `\t\t${JSON.stringify(route.id)}: {\n` +
+          `\t\t\tid: ${JSON.stringify(route.id)},\n` +
+          (route.path ? `\t\t\tpath: ${JSON.stringify(route.path)},\n` : "") +
+          (route.index
+            ? `\t\t\tindex: ${JSON.stringify(route.index)},\n`
+            : "") +
+          (route.parentId
+            ? `\t\t\tparentId: ${JSON.stringify(route.parentId)},\n`
+            : "") +
+          `\t\t\timports: [],\n` +
+          `\t\t\tmodule: ${JSON.stringify(`/${checksum}/${route.id}.js`)},\n` +
+          `\t\t\thasAction: "action" in route${index},\n` +
+          `\t\t\thasLoader: "loader" in route${index},\n` +
+          `\t\t\thasCatchBoundary: "CatchBoundary" in route${index},\n` +
+          `\t\t\thasErrorBoundary: "ErrorBoundary" in route${index},\n` +
+          "\t\t},"
+      )
+      .join("\n\t") +
+    "\t\t\n}";
+
+  await Deno.writeTextFile(
+    generatedFile,
+    `// DO NOT EDIT. This file is generated by fresh.
+// This file SHOULD be checked into source version control.
+// This file is automatically updated during development when running \`deno task dev\`.
+
+import * as serverEntry from ${JSON.stringify(serverEntry)};
+${routeImports}
+
+export const assetsBuildDirectory = "";
+export const publicPath = ${JSON.stringify(`/${checksum}/`)};
+export const entry = { module: serverEntry };
+export const routes = ${routesObject};
+export const assets = {
+  url: ${JSON.stringify(`/${checksum}/manifest.js`)},
+  version: ${JSON.stringify(checksum)},
+  entry: { imports: [], module: ${JSON.stringify(
+    `/${checksum}/entry.client.js`
+  )} },
+  routes: ${assetRoutes},
+};
+`
+  );
+}
