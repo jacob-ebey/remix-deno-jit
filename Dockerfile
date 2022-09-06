@@ -8,6 +8,6 @@ WORKDIR /app
 # These steps will be re-run upon each file change in your working directory:
 ADD . .
 # Cache deps so that they are not re-fetched on each build.
-RUN find . -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache {} +
+RUN find . -not -path "./__mocks__/*" -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache {} +
 
 CMD ["deno", "task", "start"]

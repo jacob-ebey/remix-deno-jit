@@ -8,7 +8,7 @@ jobs:
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
-      - run: find . -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache {} +
+      - run: find . -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache --import-map import_map_test.json {} +
       - run: deno task test
       - run: deno task check
       - run: deno task lint
