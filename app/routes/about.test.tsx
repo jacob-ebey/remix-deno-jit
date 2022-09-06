@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useCallback, useState } from "react";
 import { type LoaderArgs, json } from "@remix-run/deno";
 import { Link, useLoaderData } from "@remix-run/react";
 
@@ -11,10 +11,10 @@ export function loader({}: LoaderArgs) {
 
 export default function Index() {
   const { message } = useLoaderData<typeof loader>();
-  const [count, setCount] = React.useState(0);
+  const [count, setCount] = useState(0);
 
   const { reward } = useReward("rewardId", "balloons");
-  const debouncedReward = React.useCallback(throttle(reward, 1000), [reward]);
+  const debouncedReward = useCallback(throttle(reward, 1000), [reward]);
 
   return (
     <div>

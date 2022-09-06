@@ -10,7 +10,7 @@ import * as route3 from "./app/routes/index.tsx";
 import * as route4 from "./app/routes/about.tsx";
 
 export const assetsBuildDirectory = "";
-export const publicPath = "/db1cd9ce2cd0be817695a91e2da1cd26/";
+export const publicPath = "/dd2ce9ddac6a9c68130a7b66b06ecbfb/";
 export const entry = { module: serverEntry };
 export const routes = {
 	"root": {
@@ -48,14 +48,14 @@ export const routes = {
 	},
 };
 export const assets = {
-  url: "/db1cd9ce2cd0be817695a91e2da1cd26/manifest.js",
-  version: "db1cd9ce2cd0be817695a91e2da1cd26",
-  entry: { imports: [], module: "/db1cd9ce2cd0be817695a91e2da1cd26/entry.client.js" },
+  url: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/manifest.js",
+  version: "dd2ce9ddac6a9c68130a7b66b06ecbfb",
+  entry: { imports: [], module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/entry.client.js" },
   routes: {
 		"root": {
 			id: "root",
 			imports: [],
-			module: "/db1cd9ce2cd0be817695a91e2da1cd26/root.js",
+			module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/root.js",
 			hasAction: "action" in route0,
 			hasLoader: "loader" in route0,
 			hasCatchBoundary: "CatchBoundary" in route0,
@@ -66,7 +66,7 @@ export const assets = {
 			path: "about/another",
 			parentId: "root",
 			imports: [],
-			module: "/db1cd9ce2cd0be817695a91e2da1cd26/routes/about_/another.js",
+			module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/routes/about_/another.js",
 			hasAction: "action" in route1,
 			hasLoader: "loader" in route1,
 			hasCatchBoundary: "CatchBoundary" in route1,
@@ -77,7 +77,7 @@ export const assets = {
 			path: "test",
 			parentId: "routes/about",
 			imports: [],
-			module: "/db1cd9ce2cd0be817695a91e2da1cd26/routes/about/test.js",
+			module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/routes/about/test.js",
 			hasAction: "action" in route2,
 			hasLoader: "loader" in route2,
 			hasCatchBoundary: "CatchBoundary" in route2,
@@ -88,7 +88,7 @@ export const assets = {
 			index: true,
 			parentId: "root",
 			imports: [],
-			module: "/db1cd9ce2cd0be817695a91e2da1cd26/routes/index.js",
+			module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/routes/index.js",
 			hasAction: "action" in route3,
 			hasLoader: "loader" in route3,
 			hasCatchBoundary: "CatchBoundary" in route3,
@@ -99,7 +99,7 @@ export const assets = {
 			path: "about",
 			parentId: "root",
 			imports: [],
-			module: "/db1cd9ce2cd0be817695a91e2da1cd26/routes/about.js",
+			module: "/dd2ce9ddac6a9c68130a7b66b06ecbfb/routes/about.js",
 			hasAction: "action" in route4,
 			hasLoader: "loader" in route4,
 			hasCatchBoundary: "CatchBoundary" in route4,

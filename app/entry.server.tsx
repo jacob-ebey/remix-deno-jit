@@ -1,4 +1,3 @@
-import * as React from "react";
 import * as ReactDOM from "react-dom/server";
 
 import { type EntryContext } from "@remix-run/deno";
