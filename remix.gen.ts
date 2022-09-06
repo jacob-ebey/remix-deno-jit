@@ -5,7 +5,7 @@
 import * as serverEntry from "./app/entry.server.tsx";
 import * as route0 from "./app/root.tsx";
 import * as route1 from "./app/routes/about_.another.tsx";
-import * as route2 from "./app/routes/about.test.tsx";
+import * as route2 from "./app/routes/about.nested.tsx";
 import * as route3 from "./app/routes/index.tsx";
 import * as route4 from "./app/routes/about.tsx";
 
@@ -23,12 +23,12 @@ export const routes = {
 		module: route1,
 		file: "./app/routes/about_.another.tsx",
 	},
-	"routes/about/test": {
-		id: "routes/about/test",
-		path: "test",
+	"routes/about/nested": {
+		id: "routes/about/nested",
+		path: "nested",
 		parentId: "routes/about",
 		module: route2,
-		file: "./app/routes/about.test.tsx",
+		file: "./app/routes/about.nested.tsx",
 	},
 	"routes/index": {
 		id: "routes/index",
@@ -68,12 +68,12 @@ export const assets = {
 			hasCatchBoundary: "CatchBoundary" in route1,
 			hasErrorBoundary: "ErrorBoundary" in route1,
 		},
-			"routes/about/test": {
-			id: "routes/about/test",
-			path: "test",
+			"routes/about/nested": {
+			id: "routes/about/nested",
+			path: "nested",
 			parentId: "routes/about",
 			imports: [],
-			module: "/routes/about/test.js",
+			module: "/routes/about/nested.js",
 			hasAction: "action" in route2,
 			hasLoader: "loader" in route2,
 			hasCatchBoundary: "CatchBoundary" in route2,

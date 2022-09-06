@@ -698,7 +698,7 @@ export async function loadRoutes(appDirectory: string) {
   function cleanUpPath(route: { parentId?: string; path?: string }) {
     if (route.parentId && route.path && routes[route.parentId].path) {
       route.path = route.path
-        .slice(-routes[route.parentId].path!.length)
+        .slice(-routes[route.parentId].path!.length - 1)
         .replace(/^\//, "")
         .replace(/\/$/, "");
     }
