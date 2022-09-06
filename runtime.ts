@@ -714,7 +714,7 @@ export async function loadRoutes(appDirectory: string) {
 export async function buildChecksum(appDirectory: string) {
   const hash = createHash("md5");
 
-  for await (const entry of fs.walk(appDirectory)) {
+  for await (const entry of fs.walk(appDirectory, { maxDepth: 1 })) {
     if (!entry.isFile) {
       continue;
     }

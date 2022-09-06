@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { type LoaderArgs, json } from "@remix-run/deno";
+import { json, type LoaderArgs } from "@remix-run/deno";
 import { Link, useLoaderData } from "@remix-run/react";
 
 import { useReward } from "react-rewards";
@@ -20,7 +20,7 @@ export default function Index() {
     <main>
       <h1>{message}</h1>
       <p>
-        <Link to="/about">About</Link>
+        <Link to="about">About</Link>
       </p>
       <p>
         <button

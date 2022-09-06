@@ -1,0 +1,13 @@
+name: Check 🧐
+on: [push]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - run: deno task test
+      - run: deno task check
+      - run: deno task lint

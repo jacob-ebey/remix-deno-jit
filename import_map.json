@@ -11,6 +11,8 @@
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
     "react-dom/server": "https://esm.sh/react-dom@18.2.0/server",
 
+    "react-test-renderer": "https://esm.sh/react-test-renderer@18.2.0",
+
     "react-rewards": "https://esm.sh/react-rewards@2.0.4"
   }
 }
