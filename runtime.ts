@@ -472,6 +472,15 @@ function createRuntime({
         return { entryPoints };
       };
 
+      const minifyOptions =
+        mode === "development"
+          ? {
+              minifyIdentifiers: false,
+              minifySyntax: true,
+              minifyWhitespace: true,
+            }
+          : { minify: true };
+
       compilationPromise = Promise.all([
         getEntryPoints(),
         ensureEsbuildInitialized(),
@@ -488,7 +497,7 @@ function createRuntime({
               {}
             ),
           },
-          minify: true,
+          ...minifyOptions,
           treeShaking: true,
           outdir: `.`,
           write: false,
