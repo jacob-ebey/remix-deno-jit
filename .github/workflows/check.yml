@@ -13,7 +13,7 @@ jobs:
           path: |
             ~/.deno
             ~/.cache/deno
-          key: ${{ runner.os }}-deno-${{ hashFiles('**/import_map*json') }}-${{ hashFiles('**/*.ts') }}-${{ hashFiles('**/*.tsx') }}
+          key: ${{ runner.os }}-deno-${{ hashFiles('**/import_map*json') }}
       - run: find . -type f \( -iname \*.tsx -o -iname \*.ts \) -exec deno cache --import-map import_map_test.json {} +
       - run: deno task test
       - run: deno task check
