@@ -43,7 +43,7 @@ interface CommonOptions<Context> {
   appDirectory?: string;
   staticDirectory?: string;
   generatedFile?: string;
-  manifest?: any;
+  manifest?: unknown;
   getLoadContext?: (request: Request) => Promise<Context>;
 }
 
@@ -136,7 +136,7 @@ function createRuntime({
   browserImportMapPath: string;
   mode: "production" | "development";
   generatedFile?: string;
-  manifest?: any;
+  manifest?: unknown;
   emitDevEvent?: (event: unknown) => void;
 }) {
   appDirectory = path.resolve(appDirectory);
@@ -206,7 +206,7 @@ function createRuntime({
 
     const initializationTasks: Promise<unknown>[] = [];
 
-    const routeModules = new Map<string, any>();
+    const routeModules = new Map<string, Record<string, unknown>>();
     const newBuild: ServerBuild = {
       entry: {
         module: await import(
@@ -214,13 +214,13 @@ function createRuntime({
         ),
       },
       routes: Object.values(routes).reduce((acc, route) => {
-        let routeModule: any = undefined;
+        let routeModule: Record<string, unknown> | undefined = undefined;
         let ensurePromise: Promise<unknown>;
         const ensureRouteModule = async () => {
           if (ensurePromise) return ensurePromise;
           if (typeof routeModule !== "undefined") return;
           routeModule = await import(route.file + "?ts=" + timestamp);
-          routeModules.set(route.id, routeModule);
+          routeModules.set(route.id, routeModule!);
         };
         initializationTasks.push((ensurePromise = ensureRouteModule()));
 
@@ -234,32 +234,40 @@ function createRuntime({
             module: {
               action: async (...args) => {
                 await ensureRouteModule();
-                return routeModule.action?.(...args) || null;
+                return (
+                  (routeModule!.action as (...args: unknown[]) => unknown)?.(
+                    ...args
+                  ) || null
+                );
               },
               loader: async (...args) => {
                 await ensureRouteModule();
-                return routeModule.loader?.(...args) || null;
+                return (
+                  (routeModule!.loader as (...args: unknown[]) => unknown)?.(
+                    ...args
+                  ) || null
+                );
               },
               get CatchBoundary() {
-                return routeModule.CatchBoundary;
+                return routeModule!.CatchBoundary;
               },
               get default() {
-                return routeModule.default;
+                return routeModule!.default;
               },
               get ErrorBoundary() {
-                return routeModule.ErrorBoundary;
+                return routeModule!.ErrorBoundary;
               },
               get handle() {
-                return routeModule.handle;
+                return routeModule!.handle;
               },
               get headers() {
-                return routeModule.headers;
+                return routeModule!.headers;
               },
               get links() {
-                return routeModule.links;
+                return routeModule!.links;
               },
               get meta() {
-                return routeModule.meta;
+                return routeModule!.meta;
               },
             },
           },
@@ -280,16 +288,16 @@ function createRuntime({
               imports: [],
               module: `/${checksum}/${route.id}.js`,
               get hasAction() {
-                return !!routeModules.get(route.id).action;
+                return !!routeModules.get(route.id)!.action;
               },
               get hasLoader() {
-                return !!routeModules.get(route.id).loader;
+                return !!routeModules.get(route.id)!.loader;
               },
               get hasCatchBoundary() {
-                return !!routeModules.get(route.id).CatchBoundary;
+                return !!routeModules.get(route.id)!.CatchBoundary;
               },
               get hasErrorBoundary() {
-                return !!routeModules.get(route.id).ErrorBoundary;
+                return !!routeModules.get(route.id)!.ErrorBoundary;
               },
             },
           };
@@ -369,7 +377,7 @@ function createRuntime({
                     },
                     denoPlugin({
                       importMapURL: path.toFileUrl(browserImportMapPath),
-                    }) as any,
+                    }) as esbuildWasm.Plugin,
                   ],
                 });
 
@@ -415,7 +423,7 @@ function createRuntime({
                 };
               }
             });
-            build.onLoad({ filter: /.*/, namespace: "remix-env" }, (args) => {
+            build.onLoad({ filter: /.*/, namespace: "remix-env" }, () => {
               return {
                 contents: `export default { env: ${JSON.stringify({
                   REMIX_DEV_SERVER_WS_PORT: window.location?.port || null,
@@ -445,7 +453,7 @@ function createRuntime({
         browserRouteModulesPlugin,
         denoPlugin({
           importMapURL: path.toFileUrl(browserImportMapPath),
-        }) as any,
+        }) as esbuildWasm.Plugin,
       ];
     };
 
@@ -461,13 +469,13 @@ function createRuntime({
               "entry.client": entry,
             }
           : {};
-        return { entry, entryPoints };
+        return { entryPoints };
       };
 
       compilationPromise = Promise.all([
         getEntryPoints(),
         ensureEsbuildInitialized(),
-      ]).then(([{ entry, entryPoints }]) =>
+      ]).then(([{ entryPoints }]) =>
         esbuild.build({
           absWorkingDir: Deno.cwd(),
           entryPoints: {
@@ -686,7 +694,9 @@ async function findFileWithExt(baseName: string, exts: string[]) {
       if (stat.isFile) {
         return fileName;
       }
-    } catch {}
+    } catch {
+      // do nothing
+    }
   }
   return undefined;
 }
