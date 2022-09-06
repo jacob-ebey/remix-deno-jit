@@ -178,8 +178,12 @@ function createRuntime({
       return lastBuild;
     }
 
+    const checksum = await buildChecksum(appDirectory);
+
     if (mode === "production") {
-      const newBuild = manifest || (await import(generatedFile!));
+      const newBuild =
+        (manifest ? createBuildFromManifest(checksum, manifest) : undefined) ||
+        (await import(generatedFile!));
       lastBuildTime = timestamp;
       lastBuild = newBuild;
       lastBuildChecksum = newBuild.assets.version;
@@ -192,10 +196,7 @@ function createRuntime({
       return newBuild;
     }
 
-    const [routes, checksum] = await Promise.all([
-      loadRoutes(appDirectory),
-      buildChecksum(appDirectory),
-    ]);
+    const routes = await loadRoutes(appDirectory);
 
     await writeGeneratedFile({
       appDirectory,
@@ -318,6 +319,37 @@ function createRuntime({
 
     return newBuild;
   };
+
+  function createBuildFromManifest(checksum: string, manifest: unknown) {
+    const serverBuild = manifest as ServerBuild;
+    return {
+      entry: serverBuild.entry,
+      routes: serverBuild.routes,
+      publicPath: `/${checksum}/`,
+      assetsBuildDirectory: "",
+      assets: {
+        ...serverBuild.assets,
+        url: `/${checksum}/manifest.js`,
+        version: checksum,
+        entry: {
+          imports: [],
+          module: `/${checksum}${serverBuild.assets.entry.module}`,
+        },
+        routes: Object.values(serverBuild.assets.routes).reduce(
+          (acc, route) => {
+            return {
+              ...acc,
+              [route.id]: {
+                ...route,
+                module: `/${checksum}${route.module}`,
+              },
+            };
+          },
+          {}
+        ),
+      },
+    };
+  }
 
   async function ensureCompilation({ checksum }: { checksum: string }) {
     checksum = checksum || (await buildChecksum(appDirectory));
@@ -724,7 +756,6 @@ export async function writeGeneratedFile({
   generatedFile,
   appDirectory,
   routes,
-  checksum,
 }: {
   generatedFile: string;
   appDirectory: string;
@@ -800,7 +831,7 @@ export async function writeGeneratedFile({
             ? `\t\t\tparentId: ${JSON.stringify(route.parentId)},\n`
             : "") +
           `\t\t\timports: [],\n` +
-          `\t\t\tmodule: ${JSON.stringify(`/${checksum}/${route.id}.js`)},\n` +
+          `\t\t\tmodule: ${JSON.stringify(`/${route.id}.js`)},\n` +
           `\t\t\thasAction: "action" in route${index},\n` +
           `\t\t\thasLoader: "loader" in route${index},\n` +
           `\t\t\thasCatchBoundary: "CatchBoundary" in route${index},\n` +
@@ -820,16 +851,10 @@ export async function writeGeneratedFile({
 import * as serverEntry from ${JSON.stringify(serverEntry)};
 ${routeImports}
 
-export const assetsBuildDirectory = "";
-export const publicPath = ${JSON.stringify(`/${checksum}/`)};
 export const entry = { module: serverEntry };
 export const routes = ${routesObject};
 export const assets = {
-  url: ${JSON.stringify(`/${checksum}/manifest.js`)},
-  version: ${JSON.stringify(checksum)},
-  entry: { imports: [], module: ${JSON.stringify(
-    `/${checksum}/entry.client.js`
-  )} },
+  entry: { imports: [], module: ${JSON.stringify(`/entry.client.js`)} },
   routes: ${assetRoutes},
 };
 `
