@@ -76,7 +76,13 @@ export function createRequestHandler<Context = unknown>({
     emitDevEvent,
   });
 
-  runtime.loadBuild().then(() => runtime.ensureCompilation());
+  runtime
+    .loadBuild()
+    .then(() =>
+      runtime.checksum
+        ? runtime.ensureCompilation({ checksum: runtime.checksum })
+        : void 0
+    );
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -305,7 +311,7 @@ function createRuntime({
     return newBuild;
   };
 
-  async function ensureCompilation({ checksum }: { checksum?: string } = {}) {
+  async function ensureCompilation({ checksum }: { checksum: string }) {
     checksum = checksum || (await buildChecksum(appDirectory));
     const getPlugins = () => {
       const browserRouteModulesPlugin = {
@@ -504,6 +510,9 @@ function createRuntime({
   return {
     ensureCompilation,
     loadBuild,
+    get checksum(): string | undefined {
+      return lastBuildChecksum;
+    },
     async serveAssets(url: URL): Promise<Response | undefined> {
       if (!url.pathname.startsWith(`/${lastBuildChecksum}/`)) {
         return undefined;
