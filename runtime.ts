@@ -76,6 +76,8 @@ export function createRequestHandler<Context = unknown>({
     emitDevEvent,
   });
 
+  runtime.loadBuild().then(() => runtime.ensureCompilation());
+
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
 
@@ -180,6 +182,7 @@ function createRuntime({
           newBuild.routes as Record<string, { file: string; id: string }>
         ).map((r) => [path.resolve(path.dirname(generatedFile!), r.file), r.id])
       );
+
       return newBuild;
     }
 
@@ -302,7 +305,204 @@ function createRuntime({
     return newBuild;
   };
 
+  async function ensureCompilation({ checksum }: { checksum?: string } = {}) {
+    checksum = checksum || (await buildChecksum(appDirectory));
+    const getPlugins = () => {
+      const browserRouteModulesPlugin = {
+        name: "browser-route-modules",
+        setup(build: esbuildWasm.PluginBuild) {
+          build.onResolve({ filter: /\?route$/ }, (args) => {
+            const file = args.path.replace(/\?route$/, "");
+            if (lastRoutes!.has(file)) {
+              return {
+                path: path.toFileUrl(args.path).href,
+                namespace: "browser-route-modules",
+                sideEffects: false,
+                pluginData: { file },
+              };
+            }
+            return undefined;
+          });
+          build.onLoad(
+            { filter: /.*/, namespace: "browser-route-modules" },
+            async (args) => {
+              const file = args.pluginData.file;
+              if (file) {
+                await ensureEsbuildInitialized();
+                const result = await esbuild.build({
+                  absWorkingDir: Deno.cwd(),
+                  minify: mode === "production",
+                  treeShaking: true,
+                  logLevel: "silent",
+                  entryPoints: {
+                    route: file,
+                  },
+                  write: false,
+                  outdir: `.`,
+                  bundle: true,
+                  splitting: true,
+                  format: "esm",
+                  publicPath: `/${checksum}/`,
+                  metafile: true,
+                  jsx: "automatic",
+                  jsxImportSource: "react",
+                  plugins: [
+                    {
+                      name: "externals",
+                      setup(build) {
+                        build.onResolve({ filter: /.*/ }, (args) => {
+                          if (args.path !== file) {
+                            return {
+                              path: args.path,
+                              external: true,
+                            };
+                          }
+                          return undefined;
+                        });
+                      },
+                    },
+                    denoPlugin({
+                      importMapURL: path.toFileUrl(browserImportMapPath),
+                    }) as any,
+                  ],
+                });
+
+                const meta = Object.values(result.metafile?.outputs || {})[0];
+
+                if (meta) {
+                  const theExports = meta.exports.filter(
+                    (ex) => !!browserSafeRouteExports[ex]
+                  );
+
+                  let contents = "module.exports = {};";
+                  if (theExports.length !== 0) {
+                    const spec = `{ ${theExports.join(", ")} }`;
+                    contents = `export ${spec} from ${JSON.stringify(file)};`;
+                  }
+
+                  return {
+                    contents,
+                    resolveDir: appDirectory,
+                    loader: "ts",
+                  };
+                }
+              }
+              return undefined;
+            }
+          );
+        },
+      };
+
+      return [
+        {
+          name: "remix-env",
+          setup(build: esbuildWasm.PluginBuild) {
+            build.onResolve({ filter: /.*/ }, (args) => {
+              if (
+                args.path.startsWith("https://deno.land/std") &&
+                args.path.endsWith("/node/process.ts")
+              ) {
+                return {
+                  path: args.path,
+                  sideEffects: false,
+                  namespace: "remix-env",
+                };
+              }
+            });
+            build.onLoad({ filter: /.*/, namespace: "remix-env" }, (args) => {
+              return {
+                contents: `export default { env: ${JSON.stringify({
+                  REMIX_DEV_SERVER_WS_PORT: window.location?.port || null,
+                })} };`,
+              };
+            });
+          },
+        },
+        {
+          name: "exclude-deno",
+          setup(build: esbuildWasm.PluginBuild) {
+            build.onResolve({ filter: /.*/ }, (args) => {
+              if (
+                args.path === "@remix-run/deno" ||
+                args.resolveDir.match(/@remix-run\/deno/) ||
+                args.path.startsWith("https://deno.land/std")
+              ) {
+                return {
+                  path: args.path,
+                  external: true,
+                  sideEffects: false,
+                };
+              }
+            });
+          },
+        },
+        browserRouteModulesPlugin,
+        denoPlugin({
+          importMapURL: path.toFileUrl(browserImportMapPath),
+        }) as any,
+      ];
+    };
+
+    if (!compilationPromise || lastModifiedTime > lastClientBuildTime) {
+      lastClientBuildTime = Date.now();
+      const getEntryPoints = async () => {
+        const entry = await findFileWithExt(
+          path.resolve(appDirectory, "entry.client"),
+          [".tsx", ".ts"]
+        );
+        const entryPoints: Record<string, string> = entry
+          ? {
+              "entry.client": entry,
+            }
+          : {};
+        return { entry, entryPoints };
+      };
+
+      compilationPromise = Promise.all([
+        getEntryPoints(),
+        ensureEsbuildInitialized(),
+      ]).then(([{ entry, entryPoints }]) =>
+        esbuild.build({
+          absWorkingDir: Deno.cwd(),
+          entryPoints: {
+            ...entryPoints,
+            ...[...lastRoutes!.entries()].reduce(
+              (acc, [file, routeId]) => ({
+                ...acc,
+                [routeId]: file + "?route",
+              }),
+              {}
+            ),
+          },
+          minify: true,
+          treeShaking: true,
+          outdir: `.`,
+          write: false,
+          bundle: true,
+          splitting: true,
+          format: "esm",
+          jsx: "automatic",
+          jsxImportSource: "react",
+          publicPath: `/${checksum}/`,
+          logLevel: "info",
+          color: mode === "development",
+          plugins: getPlugins(),
+          metafile: true,
+        })
+      );
+
+      const buildResult = await compilationPromise;
+      const cwdLen = Deno.cwd().length;
+      for (const output of buildResult.outputFiles || []) {
+        assetsLRU.set("/" + checksum + output.path.slice(cwdLen), output.text);
+      }
+    }
+
+    await compilationPromise;
+  }
+
   return {
+    ensureCompilation,
     loadBuild,
     async serveAssets(url: URL): Promise<Response | undefined> {
       if (!url.pathname.startsWith(`/${lastBuildChecksum}/`)) {
@@ -338,201 +538,7 @@ function createRuntime({
         );
       }
 
-      const getPlugins = () => {
-        const browserRouteModulesPlugin = {
-          name: "browser-route-modules",
-          setup(build: esbuildWasm.PluginBuild) {
-            build.onResolve({ filter: /\?route$/ }, (args) => {
-              const file = args.path.replace(/\?route$/, "");
-              if (lastRoutes!.has(file)) {
-                return {
-                  path: path.toFileUrl(args.path).href,
-                  namespace: "browser-route-modules",
-                  sideEffects: false,
-                  pluginData: { file },
-                };
-              }
-              return undefined;
-            });
-            build.onLoad(
-              { filter: /.*/, namespace: "browser-route-modules" },
-              async (args) => {
-                const file = args.pluginData.file;
-                if (file) {
-                  await ensureEsbuildInitialized();
-                  const result = await esbuild.build({
-                    absWorkingDir: Deno.cwd(),
-                    minify: mode === "production",
-                    treeShaking: true,
-                    logLevel: "silent",
-                    entryPoints: {
-                      route: file,
-                    },
-                    write: false,
-                    outdir: `.`,
-                    bundle: true,
-                    splitting: true,
-                    format: "esm",
-                    publicPath: `/${checksum}/`,
-                    metafile: true,
-                    jsx: "automatic",
-                    jsxImportSource: "react",
-                    plugins: [
-                      {
-                        name: "externals",
-                        setup(build) {
-                          build.onResolve({ filter: /.*/ }, (args) => {
-                            if (args.path !== file) {
-                              return {
-                                path: args.path,
-                                external: true,
-                              };
-                            }
-                            return undefined;
-                          });
-                        },
-                      },
-                      denoPlugin({
-                        importMapURL: path.toFileUrl(browserImportMapPath),
-                      }) as any,
-                    ],
-                  });
-
-                  const meta = Object.values(result.metafile?.outputs || {})[0];
-
-                  if (meta) {
-                    const theExports = meta.exports.filter(
-                      (ex) => !!browserSafeRouteExports[ex]
-                    );
-
-                    let contents = "module.exports = {};";
-                    if (theExports.length !== 0) {
-                      const spec = `{ ${theExports.join(", ")} }`;
-                      contents = `export ${spec} from ${JSON.stringify(file)};`;
-                    }
-
-                    return {
-                      contents,
-                      resolveDir: appDirectory,
-                      loader: "ts",
-                    };
-                  }
-                }
-                return undefined;
-              }
-            );
-          },
-        };
-
-        return [
-          {
-            name: "remix-env",
-            setup(build: esbuildWasm.PluginBuild) {
-              build.onResolve({ filter: /.*/ }, (args) => {
-                if (
-                  args.path.startsWith("https://deno.land/std") &&
-                  args.path.endsWith("/node/process.ts")
-                ) {
-                  return {
-                    path: args.path,
-                    sideEffects: false,
-                    namespace: "remix-env",
-                  };
-                }
-              });
-              build.onLoad({ filter: /.*/, namespace: "remix-env" }, (args) => {
-                return {
-                  contents: `export default { env: ${JSON.stringify({
-                    REMIX_DEV_SERVER_WS_PORT: window.location?.port || null,
-                  })} };`,
-                };
-              });
-            },
-          },
-          {
-            name: "exclude-deno",
-            setup(build: esbuildWasm.PluginBuild) {
-              build.onResolve({ filter: /.*/ }, (args) => {
-                if (
-                  args.path === "@remix-run/deno" ||
-                  args.resolveDir.match(/@remix-run\/deno/) ||
-                  args.path.startsWith("https://deno.land/std")
-                ) {
-                  return {
-                    path: args.path,
-                    external: true,
-                    sideEffects: false,
-                  };
-                }
-              });
-            },
-          },
-          browserRouteModulesPlugin,
-          denoPlugin({
-            importMapURL: path.toFileUrl(browserImportMapPath),
-          }) as any,
-        ];
-      };
-
-      if (!compilationPromise || lastModifiedTime > lastClientBuildTime) {
-        lastClientBuildTime = Date.now();
-        const getEntryPoints = async () => {
-          const entry = await findFileWithExt(
-            path.resolve(appDirectory, "entry.client"),
-            [".tsx", ".ts"]
-          );
-          const entryPoints: Record<string, string> = entry
-            ? {
-                "entry.client": entry,
-              }
-            : {};
-          return { entry, entryPoints };
-        };
-
-        compilationPromise = Promise.all([
-          getEntryPoints(),
-          ensureEsbuildInitialized(),
-        ]).then(([{ entry, entryPoints }]) =>
-          esbuild.build({
-            absWorkingDir: Deno.cwd(),
-            entryPoints: {
-              ...entryPoints,
-              ...[...lastRoutes!.entries()].reduce(
-                (acc, [file, routeId]) => ({
-                  ...acc,
-                  [routeId]: file + "?route",
-                }),
-                {}
-              ),
-            },
-            minify: true,
-            treeShaking: true,
-            outdir: `.`,
-            write: false,
-            bundle: true,
-            splitting: true,
-            format: "esm",
-            jsx: "automatic",
-            jsxImportSource: "react",
-            publicPath: `/${checksum}/`,
-            logLevel: "info",
-            color: mode === "development",
-            plugins: getPlugins(),
-            metafile: true,
-          })
-        );
-
-        const buildResult = await compilationPromise;
-        const cwdLen = Deno.cwd().length;
-        for (const output of buildResult.outputFiles) {
-          assetsLRU.set(
-            "/" + checksum + output.path.slice(cwdLen),
-            output.text
-          );
-        }
-      }
-
-      await compilationPromise;
+      await ensureCompilation({ checksum });
 
       const file = assetsLRU.get(url.pathname);
       if (file) {
