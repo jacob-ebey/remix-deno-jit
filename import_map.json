@@ -1,16 +1,17 @@
 {
   "imports": {
     "~/": "./app/",
-    "@remix-run/deno": "https://esm.sh/@remix-run/deno@1.7.0/index.ts",
-    "@remix-run/server-runtime": "https://esm.sh/@remix-run/server-runtime@1.7.0",
-    "@remix-run/react": "https://esm.sh/@remix-run/react@1.7.0?deps=react@18.2.0,react-dom@18.2.0",
+    "@remix-run/deno": "https://esm.sh/@remix-run/deno@1.7.0/index.ts?alias=react:preact/compat&deps=preact@10.10.6",
+    "@remix-run/server-runtime": "https://esm.sh/@remix-run/server-runtime@1.7.0?alias=react:preact/compat&deps=preact@10.10.6",
+    "@remix-run/react": "https://esm.sh/@remix-run/react@1.7.0?deps=react@18.2.0,react-dom@18.2.0&alias=react:preact/compat,react-dom:preact/compat&deps=preact@10.10.6",
     "mime": "https://esm.sh/mime@3.0.0?no-dts",
-    "react": "https://esm.sh/react@18.2.0",
-    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
-    "react-dom": "https://esm.sh/react-dom@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "react-dom/server": "https://esm.sh/react-dom@18.2.0/server",
+    "preact": "https://esm.sh/preact@10.10.6",
+    "preact/debug": "https://esm.sh/preact@10.10.6/debug",
+    "react": "https://esm.sh/preact@10.10.6/compat",
+    "react/jsx-runtime": "https://esm.sh/preact@10.10.6/jsx-runtime",
+    "react-dom": "https://esm.sh/preact@10.10.6/compat?alias=react:preact/compat&deps=preact@10.10.6",
+    "react-dom/server": "https://esm.sh/preact-render-to-string@5.2.2?alias=react:preact/compat&deps=preact@10.10.6",
 
-    "react-rewards": "https://esm.sh/react-rewards@2.0.4"
+    "react-rewards": "https://esm.sh/react-rewards@2.0.4?alias=react:preact/compat&deps=preact@10.10.6"
   }
 }
