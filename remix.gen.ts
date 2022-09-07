@@ -4,11 +4,10 @@
 
 import * as serverEntry from "./app/entry.server.tsx";
 import * as route0 from "./app/root.tsx";
-import * as route1 from "./app/routes/__tests__/index.test.tsx";
-import * as route2 from "./app/routes/about_.another.tsx";
-import * as route3 from "./app/routes/about.nested.tsx";
-import * as route4 from "./app/routes/index.tsx";
-import * as route5 from "./app/routes/about.tsx";
+import * as route1 from "./app/routes/about_.another.tsx";
+import * as route2 from "./app/routes/about.nested.tsx";
+import * as route3 from "./app/routes/index.tsx";
+import * as route4 from "./app/routes/about.tsx";
 
 export const entry = { module: serverEntry };
 export const routes = {
@@ -17,39 +16,32 @@ export const routes = {
 		module: route0,
 		file: "./app/root.tsx",
 	},
-	"routes/__tests__/index/test": {
-		id: "routes/__tests__/index/test",
-		path: "__tests_/index/test",
-		parentId: "root",
-		module: route1,
-		file: "./app/routes/__tests__/index.test.tsx",
-	},
 	"routes/about_/another": {
 		id: "routes/about_/another",
 		path: "about/another",
 		parentId: "root",
-		module: route2,
+		module: route1,
 		file: "./app/routes/about_.another.tsx",
 	},
 	"routes/about/nested": {
 		id: "routes/about/nested",
 		path: "nested",
 		parentId: "routes/about",
-		module: route3,
+		module: route2,
 		file: "./app/routes/about.nested.tsx",
 	},
 	"routes/index": {
 		id: "routes/index",
 		index: true,
 		parentId: "root",
-		module: route4,
+		module: route3,
 		file: "./app/routes/index.tsx",
 	},
 	"routes/about": {
 		id: "routes/about",
 		path: "about",
 		parentId: "root",
-		module: route5,
+		module: route4,
 		file: "./app/routes/about.tsx",
 	},
 };
@@ -65,27 +57,16 @@ export const assets = {
 			hasCatchBoundary: "CatchBoundary" in route0,
 			hasErrorBoundary: "ErrorBoundary" in route0,
 		},
-			"routes/__tests__/index/test": {
-			id: "routes/__tests__/index/test",
-			path: "__tests_/index/test",
-			parentId: "root",
-			imports: [],
-			module: "/routes/__tests__/index/test.js",
-			hasAction: "action" in route1,
-			hasLoader: "loader" in route1,
-			hasCatchBoundary: "CatchBoundary" in route1,
-			hasErrorBoundary: "ErrorBoundary" in route1,
-		},
 			"routes/about_/another": {
 			id: "routes/about_/another",
 			path: "about/another",
 			parentId: "root",
 			imports: [],
 			module: "/routes/about_/another.js",
-			hasAction: "action" in route2,
-			hasLoader: "loader" in route2,
-			hasCatchBoundary: "CatchBoundary" in route2,
-			hasErrorBoundary: "ErrorBoundary" in route2,
+			hasAction: "action" in route1,
+			hasLoader: "loader" in route1,
+			hasCatchBoundary: "CatchBoundary" in route1,
+			hasErrorBoundary: "ErrorBoundary" in route1,
 		},
 			"routes/about/nested": {
 			id: "routes/about/nested",
@@ -93,10 +74,10 @@ export const assets = {
 			parentId: "routes/about",
 			imports: [],
 			module: "/routes/about/nested.js",
-			hasAction: "action" in route3,
-			hasLoader: "loader" in route3,
-			hasCatchBoundary: "CatchBoundary" in route3,
-			hasErrorBoundary: "ErrorBoundary" in route3,
+			hasAction: "action" in route2,
+			hasLoader: "loader" in route2,
+			hasCatchBoundary: "CatchBoundary" in route2,
+			hasErrorBoundary: "ErrorBoundary" in route2,
 		},
 			"routes/index": {
 			id: "routes/index",
@@ -104,10 +85,10 @@ export const assets = {
 			parentId: "root",
 			imports: [],
 			module: "/routes/index.js",
-			hasAction: "action" in route4,
-			hasLoader: "loader" in route4,
-			hasCatchBoundary: "CatchBoundary" in route4,
-			hasErrorBoundary: "ErrorBoundary" in route4,
+			hasAction: "action" in route3,
+			hasLoader: "loader" in route3,
+			hasCatchBoundary: "CatchBoundary" in route3,
+			hasErrorBoundary: "ErrorBoundary" in route3,
 		},
 			"routes/about": {
 			id: "routes/about",
@@ -115,10 +96,10 @@ export const assets = {
 			parentId: "root",
 			imports: [],
 			module: "/routes/about.js",
-			hasAction: "action" in route5,
-			hasLoader: "loader" in route5,
-			hasCatchBoundary: "CatchBoundary" in route5,
-			hasErrorBoundary: "ErrorBoundary" in route5,
+			hasAction: "action" in route4,
+			hasLoader: "loader" in route4,
+			hasCatchBoundary: "CatchBoundary" in route4,
+			hasErrorBoundary: "ErrorBoundary" in route4,
 		},		
 },
 };

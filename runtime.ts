@@ -36,6 +36,7 @@ interface CreateRequestHandlerArgs<Context> extends CommonOptions<Context> {
 
 export function createRequestHandler<Context = unknown>({
   appDirectory = path.resolve(Deno.cwd(), "app"),
+  assetsDirectory = path.resolve(Deno.cwd(), "assets"),
   generatedFile = path.resolve(Deno.cwd(), "remix.gen.ts"),
   browserImportMapPath,
   staticDirectory = path.resolve(Deno.cwd(), "public"),
@@ -50,6 +51,7 @@ export function createRequestHandler<Context = unknown>({
 
   const runtime = createRuntime({
     appDirectory,
+    assetsDirectory,
     manifest,
     generatedFile,
     browserImportMapPath,
@@ -123,6 +125,7 @@ export function createRequestHandler<Context = unknown>({
 
 function createRuntime({
   appDirectory,
+  assetsDirectory,
   generatedFile,
   browserImportMapPath,
   mode,
@@ -130,6 +133,7 @@ function createRuntime({
   emitDevEvent,
 }: {
   appDirectory: string;
+  assetsDirectory?: string;
   browserImportMapPath: string;
   mode: "production" | "development";
   generatedFile?: string;
@@ -137,6 +141,8 @@ function createRuntime({
   emitDevEvent?: (event: unknown) => void;
 }) {
   appDirectory = path.resolve(appDirectory);
+  console.log({ assetsDirectory });
+  assetsDirectory = assetsDirectory ? path.resolve(assetsDirectory) : undefined;
   generatedFile = generatedFile ? path.resolve(generatedFile) : undefined;
   const assetsLRU = new LRU<string>(500);
 
@@ -175,7 +181,7 @@ function createRuntime({
       return lastBuild;
     }
 
-    const checksum = await buildChecksum(appDirectory);
+    const checksum = await buildChecksum({ appDirectory, assetsDirectory });
 
     if (mode === "production") {
       const newBuild =
@@ -349,7 +355,8 @@ function createRuntime({
   }
 
   async function ensureCompilation({ checksum }: { checksum: string }) {
-    checksum = checksum || (await buildChecksum(appDirectory));
+    checksum =
+      checksum || (await buildChecksum({ appDirectory, assetsDirectory }));
     const getPlugins = () => {
       const browserRouteModulesPlugin = {
         name: "browser-route-modules",
@@ -640,7 +647,7 @@ export async function loadRoutes(appDirectory: string) {
       path?: string;
       file: string;
     }[] = [];
-    for await (const entry of fs.walk(routesDir)) {
+    for await (const entry of fs.walk(routesDir, { maxDepth: 1 })) {
       if (
         !entry.isFile ||
         !(entry.path.endsWith(".ts") || entry.path.endsWith(".tsx"))
@@ -711,15 +718,32 @@ export async function loadRoutes(appDirectory: string) {
   return routes;
 }
 
-export function buildChecksum(appDirectory: string) {
+export function buildChecksum({
+  appDirectory,
+  assetsDirectory,
+}: {
+  appDirectory: string;
+  assetsDirectory?: string;
+}) {
+  console.log({ appDirectory, assetsDirectory });
   const hash = createHash("md5");
 
-  for (const entry of fs.walkSync(appDirectory, { maxDepth: 1 })) {
+  for (const entry of fs.walkSync(appDirectory)) {
     if (!entry.isFile) {
       continue;
     }
     const file = Deno.readFileSync(entry.path);
     hash.update(file);
+  }
+
+  if (assetsDirectory) {
+    for (const entry of fs.walkSync(assetsDirectory)) {
+      if (!entry.isFile) {
+        continue;
+      }
+      const file = Deno.readFileSync(entry.path);
+      hash.update(file);
+    }
   }
 
   return hash.toString();
@@ -863,16 +887,20 @@ defaultPort = Number.isSafeInteger(defaultPort) ? defaultPort : 8080;
 
 export async function dev<Context>({
   generatedFile = Deno.cwd() + "/remix.gen.ts",
+  assetsDirectory = path.resolve(Deno.cwd(), "assets"),
   port = defaultPort,
   ...options
 }: CommonOptions<Context>) {
-  assets.settings.assetsDirectory = path.resolve(
-    options.assetsDirectory || path.resolve(Deno.cwd(), "assets")
-  );
+  assets.settings.assetsDirectory = assetsDirectory
+    ? path.resolve(assetsDirectory || path.resolve(Deno.cwd(), "assets"))
+    : undefined;
   assets.settings.getChecksum = () =>
-    buildChecksum(
-      path.resolve(options.appDirectory || path.resolve(Deno.cwd(), "app"))
-    );
+    buildChecksum({
+      appDirectory: path.resolve(
+        options.appDirectory || path.resolve(Deno.cwd(), "app")
+      ),
+      assetsDirectory: assets.settings.assetsDirectory,
+    });
 
   const mode = "development";
   window.location = { port: port.toString() } as Window["location"];
@@ -881,6 +909,7 @@ export async function dev<Context>({
 
   const handler = createRequestHandler({
     ...options,
+    assetsDirectory,
     mode,
     generatedFile,
     emitDevEvent: (event) => {
@@ -933,15 +962,19 @@ export async function dev<Context>({
 export async function start<Context>({
   generatedFile = Deno.cwd() + "/remix.gen.ts",
   port = defaultPort,
+  assetsDirectory = path.resolve(Deno.cwd(), "assets"),
   ...options
 }: CommonOptions<Context>) {
   assets.settings.assetsDirectory = path.resolve(
-    options.assetsDirectory || path.resolve(Deno.cwd(), "assets")
+    assetsDirectory || path.resolve(Deno.cwd(), "assets")
   );
   assets.settings.getChecksum = () =>
-    buildChecksum(
-      path.resolve(options.appDirectory || path.resolve(Deno.cwd(), "app"))
-    );
+    buildChecksum({
+      appDirectory: path.resolve(
+        options.appDirectory || path.resolve(Deno.cwd(), "app")
+      ),
+      assetsDirectory: assets.settings.assetsDirectory,
+    });
 
   const mode = "production";
   window.location = { port: port.toString() } as Window["location"];
@@ -950,6 +983,7 @@ export async function start<Context>({
     ...options,
     mode,
     generatedFile,
+    assetsDirectory,
   });
 
   const server = Deno.listen({ port });

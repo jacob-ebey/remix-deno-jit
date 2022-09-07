@@ -7,10 +7,13 @@ interface Asset {
 
 declare global {
   var __BROWSER_BUILD__: boolean;
+  var __remixManifest: any;
 }
 
-export const settings = {
-  assetsDirectory: "",
+export const settings: {
+  assetsDirectory?: string;
+  getChecksum: () => string;
+} = {
   getChecksum: () => "",
 };
 
