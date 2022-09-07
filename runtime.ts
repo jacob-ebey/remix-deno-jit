@@ -1,6 +1,5 @@
 import * as fs from "https://deno.land/std@0.154.0/fs/mod.ts";
 import * as path from "https://deno.land/std@0.154.0/path/mod.ts";
-import { iterateReader } from "https://deno.land/std@0.154.0/streams/conversion.ts";
 import { contentType } from "https://deno.land/std@0.154.0/media_types/mod.ts";
 import { createHash } from "https://deno.land/std@0.154.0/hash/mod.ts";
 import { LRU } from "https://deno.land/x/lru@1.0.2/mod.ts";
@@ -11,37 +10,19 @@ import {
   createRequestHandler as createRemixRequestHandler,
 } from "@remix-run/deno";
 
-// -- esbuild --
-// @deno-types="https://deno.land/x/esbuild@v0.15.7/mod.d.ts"
-import esbuildWasm from "https://esm.sh/esbuild-wasm@0.15.7/lib/browser.js?pin=v86&target=deno";
-import * as esbuildNative from "https://deno.land/x/esbuild@v0.15.7/mod.js";
-// @ts-ignore trust me
-const esbuild: typeof esbuildWasm =
-  Deno.run === undefined ? esbuildWasm : esbuildNative;
-
-let esbuildInitialized: boolean | Promise<void> = false;
-async function ensureEsbuildInitialized() {
-  if (esbuildInitialized === false) {
-    if (Deno.run === undefined) {
-      esbuildInitialized = esbuild.initialize({
-        wasmURL: "https://esm.sh/esbuild-wasm@0.15.7/esbuild.wasm",
-        worker: false,
-      });
-    } else {
-      esbuild.initialize({});
-    }
-    await esbuildInitialized;
-    esbuildInitialized = true;
-  } else if (esbuildInitialized instanceof Promise) {
-    await esbuildInitialized;
-  }
-}
+import {
+  esbuild,
+  ensureEsbuildInitialized,
+  type esbuildWasm,
+} from "./esbuild.ts";
+import * as assets from "./assets.ts";
 
 interface CommonOptions<Context> {
   port?: number;
   browserImportMapPath: string;
   appDirectory?: string;
   staticDirectory?: string;
+  assetsDirectory?: string;
   generatedFile?: string;
   manifest?: unknown;
   getLoadContext?: (request: Request) => Promise<Context>;
@@ -86,6 +67,22 @@ export function createRequestHandler<Context = unknown>({
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
+
+    if (assets.assets.has(url.pathname)) {
+      const content = await assets.assets.get(url.pathname)!.content;
+      const contentTypeHeader = contentType(
+        url.pathname.split(".").slice(-1)[0]
+      );
+      return new Response(content, {
+        status: 200,
+        headers: contentTypeHeader
+          ? {
+              "Content-Type": contentTypeHeader,
+              "Cache-Control": "public, max-age=31536000, immutable",
+            }
+          : undefined,
+      });
+    }
 
     // Serve static files
     const staticPath = path.join(staticDirectory, url.pathname);
@@ -543,6 +540,9 @@ function createRuntime({
           color: mode === "development",
           plugins: getPlugins(),
           metafile: true,
+          define: {
+            __BROWSER_BUILD__: "true",
+          },
         })
       );
 
@@ -711,17 +711,15 @@ export async function loadRoutes(appDirectory: string) {
   return routes;
 }
 
-export async function buildChecksum(appDirectory: string) {
+export function buildChecksum(appDirectory: string) {
   const hash = createHash("md5");
 
-  for await (const entry of fs.walk(appDirectory, { maxDepth: 1 })) {
+  for (const entry of fs.walkSync(appDirectory, { maxDepth: 1 })) {
     if (!entry.isFile) {
       continue;
     }
-    const file = await Deno.open(entry.path);
-    for await (const chunk of iterateReader(file)) {
-      hash.update(chunk);
-    }
+    const file = Deno.readFileSync(entry.path);
+    hash.update(file);
   }
 
   return hash.toString();
@@ -868,6 +866,14 @@ export async function dev<Context>({
   port = defaultPort,
   ...options
 }: CommonOptions<Context>) {
+  assets.settings.assetsDirectory = path.resolve(
+    options.assetsDirectory || path.resolve(Deno.cwd(), "assets")
+  );
+  assets.settings.getChecksum = () =>
+    buildChecksum(
+      path.resolve(options.appDirectory || path.resolve(Deno.cwd(), "app"))
+    );
+
   const mode = "development";
   window.location = { port: port.toString() } as Window["location"];
 
@@ -929,6 +935,14 @@ export async function start<Context>({
   port = defaultPort,
   ...options
 }: CommonOptions<Context>) {
+  assets.settings.assetsDirectory = path.resolve(
+    options.assetsDirectory || path.resolve(Deno.cwd(), "assets")
+  );
+  assets.settings.getChecksum = () =>
+    buildChecksum(
+      path.resolve(options.appDirectory || path.resolve(Deno.cwd(), "app"))
+    );
+
   const mode = "production";
   window.location = { port: port.toString() } as Window["location"];
 

@@ -1,4 +1,4 @@
-import { type MetaFunction } from "@remix-run/deno";
+import { type LinksFunction, type MetaFunction } from "@remix-run/deno";
 import {
   Links,
   LiveReload,
@@ -7,6 +7,14 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
+
+import { asset, css } from "../assets.ts";
+
+const globalStyles = asset("/global.css", css);
+
+export const links: LinksFunction = () => [
+  { rel: "stylesheet", href: globalStyles.href },
+];
 
 export const meta: MetaFunction = () => ({
   title: "Remix",

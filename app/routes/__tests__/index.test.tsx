@@ -1,8 +1,9 @@
 import { assertEquals } from "https://deno.land/std@0.154.0/testing/asserts.ts";
 import TestRenderer from "react-test-renderer";
 
-import { TestProvider, useLoaderData } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
 
+import { TestProvider } from "~/test.utils.tsx";
 import Component, { loader } from "../index.tsx";
 
 Deno.test("loader returns message", async () => {
@@ -24,7 +25,7 @@ Deno.test("renders message", () => {
   const renderer = TestRenderer.create(
     <TestProvider path="/">
       <Component />
-    </TestProvider>,
+    </TestProvider>
   );
   renderer.root.find((n) => n.children?.[0] === message);
   renderer.root.find((n) => n.type === "a" && n.props.href === "/about");

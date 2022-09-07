@@ -1,23 +1,10 @@
 import sinon from "https://esm.sh/sinon@14.0.0";
 
-import * as ReactRouter from "https://esm.sh/react-router-dom@6.3.0?deps=react@18.2.0,react-dom@18.2.0";
-import * as React from "react";
+import { type ComponentProps } from "react";
 import * as RemixReact from "@remix-run/react-original";
+import * as ReactRouter from "https://esm.sh/react-router-dom@6.3.0?deps=react@18.2.0,react-dom@18.2.0";
 
-export * from "@remix-run/react-original";
-
-const RouteTestContext = React.createContext({ path: "/" });
-export const TestProvider = ({
-  path,
-  children,
-}: {
-  path: string;
-  children: React.ReactNode;
-}) => (
-  <RouteTestContext.Provider value={{ path }}>
-    {children}
-  </RouteTestContext.Provider>
-);
+import { useTestContext } from "../app/test.utils.tsx";
 
 const stub = sinon.stub({
   useLoaderData: RemixReact.useLoaderData,
@@ -32,10 +19,10 @@ export const Link = ({
   prefetch,
   children,
   ...rest
-}: React.ComponentProps<typeof RemixReact.Link>) => {
-  const options = React.useContext(RouteTestContext);
+}: ComponentProps<typeof RemixReact.Link>) => {
+  const options = useTestContext();
   const href = ReactRouter.createPath(
-    ReactRouter.resolvePath(to, options.path),
+    ReactRouter.resolvePath(to, options.path)
   );
 
   return (
