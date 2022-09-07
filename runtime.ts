@@ -726,6 +726,7 @@ export function buildChecksum({
   assetsDirectory?: string;
 }) {
   const deploymentId = Deno.env.toObject()["DENO_DEPLOYMENT_ID"];
+  console.log({ deploymentId });
   if (deploymentId) return deploymentId;
 
   const hash = createHash("md5");
