@@ -725,7 +725,9 @@ export function buildChecksum({
   appDirectory: string;
   assetsDirectory?: string;
 }) {
-  console.log({ appDirectory, assetsDirectory });
+  const deploymentId = Deno.env.get("DENO_DEPLOYMENT_ID");
+  if (deploymentId) return deploymentId;
+
   const hash = createHash("md5");
 
   for (const entry of fs.walkSync(appDirectory)) {
