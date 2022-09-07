@@ -725,6 +725,7 @@ export function buildChecksum({
   appDirectory: string;
   assetsDirectory?: string;
 }) {
+  console.log(Deno.env.toObject());
   const deploymentId = Deno.env.get("DENO_DEPLOYMENT_ID");
   if (deploymentId) return deploymentId;
 
