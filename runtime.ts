@@ -141,7 +141,6 @@ function createRuntime({
   emitDevEvent?: (event: unknown) => void;
 }) {
   appDirectory = path.resolve(appDirectory);
-  console.log({ assetsDirectory });
   assetsDirectory = assetsDirectory ? path.resolve(assetsDirectory) : undefined;
   generatedFile = generatedFile ? path.resolve(generatedFile) : undefined;
   const assetsLRU = new LRU<string>(500);
@@ -726,7 +725,6 @@ export function buildChecksum({
   assetsDirectory?: string;
 }) {
   const deploymentId = Deno.env.toObject()["DENO_DEPLOYMENT_ID"];
-  console.log({ deploymentId });
   if (deploymentId) return deploymentId;
 
   const hash = createHash("md5");
