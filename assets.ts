@@ -1,3 +1,4 @@
+import { AssetsManifest } from "https://esm.sh/v94/@remix-run/server-runtime@1.7.0/dist/entry.d.ts";
 import { esbuild } from "./esbuild.ts";
 
 interface Asset {
@@ -7,14 +8,14 @@ interface Asset {
 
 declare global {
   var __BROWSER_BUILD__: boolean;
-  var __remixManifest: any;
+  var __remixManifest: AssetsManifest;
 }
 
 export const settings: {
   assetsDirectory?: string;
   getChecksum: () => string;
 } = {
-  getChecksum: () => "",
+  getChecksum: () => window.__remixManifest.version,
 };
 
 let assetChecksum: string | undefined =
@@ -27,15 +28,15 @@ export function asset(
   assetPath: string,
   transform?: (content: string) => Promise<string>
 ): Asset {
-  if (!assetChecksum) {
-    if (!settings.getChecksum) {
-      throw new Error("settings.getChecksum is not defined");
-    }
-    assetChecksum = settings.getChecksum();
-  }
-
   const asset = {
     get href() {
+      if (!assetChecksum) {
+        if (!settings.getChecksum) {
+          throw new Error("settings.getChecksum is not defined");
+        }
+        assetChecksum = settings.getChecksum();
+      }
+
       const href = `/${assetChecksum}${assetPath}`;
       assets.set(href, asset);
       return href;
