@@ -44,11 +44,11 @@ export function asset(
     get content() {
       if (typeof __BROWSER_BUILD__ !== "undefined") return Promise.resolve("");
 
-      return Deno.readTextFile(
-        Deno.realPathSync(settings.assetsDirectory + assetPath)
-      ).then((raw) => {
-        return transform ? transform(raw) : raw;
-      });
+      return Deno.readTextFile(settings.assetsDirectory + assetPath).then(
+        (raw) => {
+          return transform ? transform(raw) : raw;
+        }
+      );
     },
   };
 
