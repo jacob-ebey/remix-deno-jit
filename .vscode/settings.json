@@ -1,3 +1,8 @@
 {
-  "deno.enable": true
+  "deno.enable": true,
+  "deno.testing.args": [
+    "--allow-all",
+    "--no-check",
+    "--import-map=import_map_test.json"
+  ]
 }
