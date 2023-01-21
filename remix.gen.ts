@@ -103,3 +103,4 @@ export const assets = {
 		},		
 },
 };
+export const future = {};

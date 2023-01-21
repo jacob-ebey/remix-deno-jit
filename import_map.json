@@ -1,9 +1,9 @@
 {
   "imports": {
     "~/": "./app/",
-    "@remix-run/deno": "https://esm.sh/@remix-run/deno@1.7.0/index.ts",
-    "@remix-run/server-runtime": "https://esm.sh/@remix-run/server-runtime@1.7.0",
-    "@remix-run/react": "https://esm.sh/@remix-run/react@1.7.0?deps=react@18.2.0,react-dom@18.2.0",
+    "@remix-run/deno": "https://esm.sh/@remix-run/deno@1.11.1/index.ts",
+    "@remix-run/server-runtime": "https://esm.sh/@remix-run/server-runtime@1.11.1",
+    "@remix-run/react": "https://esm.sh/@remix-run/react@1.11.1?deps=react@18.2.0,react-dom@18.2.0",
     "mime": "https://esm.sh/mime@3.0.0?no-dts",
     "react": "https://esm.sh/react@18.2.0",
     "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",

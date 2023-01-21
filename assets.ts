@@ -1,4 +1,4 @@
-import { AssetsManifest } from "https://esm.sh/v94/@remix-run/server-runtime@1.7.0/dist/entry.d.ts";
+import { AssetsManifest } from "https://esm.sh/v94/@remix-run/server-runtime@1.11.1/dist/entry.d.ts";
 import { esbuild } from "./esbuild.ts";
 
 interface Asset {

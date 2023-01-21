@@ -308,6 +308,7 @@ function createRuntime({
         url: `/${checksum}/manifest.js`,
         version: checksum,
       },
+      future: {},
     };
 
     await Promise.all(initializationTasks);
@@ -879,6 +880,7 @@ export const assets = {
   entry: { imports: [], module: ${JSON.stringify(`/entry.client.js`)} },
   routes: ${assetRoutes},
 };
+export const future = {};
 `
   );
 }
