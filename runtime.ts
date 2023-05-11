@@ -351,6 +351,7 @@ function createRuntime({
           {}
         ),
       },
+      future: serverBuild.future,
     };
   }
 
